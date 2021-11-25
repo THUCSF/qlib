@@ -7,24 +7,45 @@
 [![License](https://img.shields.io/pypi/l/pyqlib)](LICENSE)
 [![Join the chat at https://gitter.im/Microsoft/qlib](https://badges.gitter.im/Microsoft/qlib.svg)](https://gitter.im/Microsoft/qlib?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 
-## THUCSF/Qlib README
+## THUCSF/Qlib
+
+### README
 
 Members from THUCSF:
-We will be working using this repo to keep our modification independent from the update of official version, which is tracked in the `main` branch.
+We will be working on this repo to keep our modification independent from the official version.
+The official version will be tracked in the `main` branch.
 The `csf` branch will record the *formal* change made by us.
-So you should not commit to the `csf` branch otherwise seriously considered.
+So you should only commit to the `csf` branch after careful considerations.
+
 To track your own change of codes, you can start a branch using your own name and save your changes in that branch.
 Use `git branch <the name of branch>` to create the branch.
 
 To switch from synchronizing with official qlib to this repo, change the `.git/config` file by adding the following lines:
-
 ```
 [remote "csf"]
         url = ssh://git@github.com/THUCSF/qlib.git
         fetch = +refs/heads/*:refs/remotes/csf/*
 ```
-
 Now, you can use `git pull csf <your branch name>` to synchronize your code with this repo.
+Alternatively, you can directly clone this repo.
+
+### Installation
+
+Please source install this repo.
+Installation steps for reference:
+```bash
+conda create -n <name of your env> python=3.8
+conda activate <name of your env>
+conda install ipython # install for better experience
+pip install numpy
+pip install --upgrade cython
+python setup.py build_ext --inplace
+```
+
+### Usage with the source installation
+
+The `qrun XXX` command is not available anymore, but can be perfectly replaced by running:
+`ipython workflow/cli.py XXX`.
 
 ## :newspaper: **What's NEW!** &nbsp;   :sparkling_heart: 
 Recent released features
