@@ -11,7 +11,7 @@ examples/project1/results
 *.pyc
 *.pyd
 *.so
-*.ipynb
+.ipynb
 *.ipynb_checkpoints
 _build
 build/
