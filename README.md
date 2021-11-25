@@ -47,6 +47,13 @@ python setup.py build_ext --inplace
 The `qrun XXX` command is not available anymore, but can be perfectly replaced by running:
 `ipython workflow/cli.py XXX`.
 
+Download data:
+
+```bash
+ipython scripts/get_data.py -- qlib_data --target_dir data/qlib_cn_stock --region cn
+```
+
+
 ## :newspaper: **What's NEW!** &nbsp;   :sparkling_heart: 
 Recent released features
 | Feature | Status |
