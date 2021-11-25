@@ -1,11 +1,18 @@
 # https://github.com/github/gitignore/blob/master/Python.gitignore
 __pycache__/
 
+data
+examples/project1/
+examples/project1/expr
+examples/project1/results
+examples/project1/results
+
+*mlruns
 *.pyc
 *.pyd
 *.so
 *.ipynb
-.ipynb_checkpoints
+*.ipynb_checkpoints
 _build
 build/
 dist/
