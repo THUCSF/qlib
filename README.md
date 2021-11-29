@@ -53,6 +53,13 @@ Download data:
 ipython scripts/get_data.py -- qlib_data --target_dir data/qlib_cn_stock --region cn
 ```
 
+Convert wind data:
+
+```bash
+ipython scripts/process_china_stock.py
+```
+
+This should work as long as the qlib's data is put in `data/qlib_cn_stock` (because its CSI file is needed).
 
 ## :newspaper: **What's NEW!** &nbsp;   :sparkling_heart: 
 Recent released features
