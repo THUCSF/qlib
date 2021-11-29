@@ -11,7 +11,7 @@
 
 ### README
 
-Members from THUCSF:
+THUCSF members:
 We will be working on this repo to keep our modification independent from the official version.
 The official version will be tracked in the `main` branch.
 The `csf` branch will record the *formal* change made by us.
@@ -53,13 +53,13 @@ Download data:
 ipython scripts/get_data.py -- qlib_data --target_dir data/qlib_cn_stock --region cn
 ```
 
-Convert wind data:
+To convert the wind data, you first need to make sure the qlib's data is put in `data/qlib_cn_stock` (because its CSI file is needed).
+Next, you should put `SH000300_orig.csv` (uploaded in the WeChat group) in `data` folder.
+Then, you can run the following command to convert wind data to qlib format:
 
 ```bash
 ipython scripts/process_china_stock.py
 ```
-
-This should work as long as the qlib's data is put in `data/qlib_cn_stock` (because its CSI file is needed).
 
 ## :newspaper: **What's NEW!** &nbsp;   :sparkling_heart: 
 Recent released features
