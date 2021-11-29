@@ -410,6 +410,8 @@ class PortAnaRecord(RecordTemp):
         portfolio_metric_dict, indicator_dict = normal_backtest(
             executor=self.executor_config, strategy=self.strategy_config, **self.backtest_config
         )
+        self.portfolio_metric_dict = portfolio_metric_dict
+        self.indicator_dict = indicator_dict
 
         for _freq, (report_normal, positions_normal) in portfolio_metric_dict.items():
             self.save(**{f"report_normal_{_freq}.pkl": report_normal})

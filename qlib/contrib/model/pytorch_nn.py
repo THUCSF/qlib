@@ -172,6 +172,9 @@ class DNNModelPytorch(Model):
         )
         x_train, y_train = df_train["feature"], df_train["label"]
         x_valid, y_valid = df_valid["feature"], df_valid["label"]
+
+        print(x_train.shape, y_train.shape, x_train.max(), y_train.max())
+
         try:
             wdf_train, wdf_valid = dataset.prepare(["train", "valid"], col_set=["weight"], data_key=DataHandlerLP.DK_L)
             w_train, w_valid = wdf_train["weight"], wdf_valid["weight"]

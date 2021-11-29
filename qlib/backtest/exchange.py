@@ -34,7 +34,7 @@ class Exchange:
         open_cost=0.0015,
         close_cost=0.0025,
         min_cost=5,
-        impact_cost=0.0,
+        impact_cost=0.1,
         extra_quote=None,
         quote_cls=NumpyQuote,
         **kwargs,
@@ -330,7 +330,12 @@ class Exchange:
     def check_stock_suspended(self, stock_id, start_time, end_time):
         # is suspended
         if stock_id in self.quote.get_all_stock():
-            return self.quote.get_data(stock_id, start_time, end_time, "$close") is None
+            # Jianjin: Qlib data use ``None'' as an indicator for suspended, but this is not good.
+            # According to wind data, the suspended has a clear indicator and the volume is 0.
+            # So for conveniency, let's use zero volume
+            no_close = self.quote.get_data(stock_id, start_time, end_time, "$close") is None
+            zero_volume = self.quote.get_data(stock_id, start_time, end_time, "$volume") < 1e-4
+            return no_close or zero_volume
         else:
             return True
 
@@ -737,6 +742,8 @@ class Exchange:
         # TODO: the adjusted cost ratio can be overestimated as deal_amount will be clipped in the next steps
         trade_val = order.deal_amount * trade_price
         adj_cost_ratio = self.impact_cost * (trade_val / total_trade_val) ** 2
+        if total_trade_val == 0:
+            print(f"!> {order.stock_id} at {order.start_time} - {order.end_time} has zero volume")
 
         if order.direction == Order.SELL:
             cost_ratio = self.close_cost + adj_cost_ratio

@@ -35,10 +35,16 @@ def get_train_config(n_layer, winsize):
     "fit_end_time": "2014-12-31",
     "instruments": market,
     "infer_processors": [
-      {"class" : "Fillna", "kwargs": {"fields_group": "feature"}},
+        {"class" : "DropnaProcessor", "kwargs": {"fields_group": "feature"}},
+        {"class" : "DropnaProcessor", "kwargs": {"fields_group": "label"}},
+    ],
+    "learn_processors": [
+        {"class" : "DropnaProcessor", "kwargs": {"fields_group": "feature"}},
+        {"class" : "DropnaProcessor", "kwargs": {"fields_group": "label"}},
     ],
     "label": ["Ref($close, -2) / Ref($close, -1) - 1"],
-    "window" : winsize
+    "window" : winsize,
+    "process_type": "independent"
   }
 
   task = {
@@ -229,7 +235,7 @@ if __name__ == "__main__":
       for win_size in win_sizes:
         val = experiment(n_layer, win_size)
         res[n_layer][win_size].append(val)
-        print(res)
+        np.save("tmp.npy", res)
 
   for n_layer in n_layers:
     for win_size in win_sizes:

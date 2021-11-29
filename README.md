@@ -44,16 +44,15 @@ python setup.py build_ext --inplace
 
 ### Usage with the source installation
 
-The `qrun XXX` command is not available anymore, but can be perfectly replaced by running:
-`ipython workflow/cli.py XXX`.
+The `qrun XXX` command is not available anymore, but can be perfectly replaced by running `ipython qlib/workflow/cli.py XXX`.
 
-Download data:
+1. Download qlib data:
 
 ```bash
 ipython scripts/get_data.py -- qlib_data --target_dir data/qlib_cn_stock --region cn
 ```
 
-To convert the wind data, you first need to make sure the qlib's data is put in `data/qlib_cn_stock` (because its CSI file is needed).
+2. To convert the wind data, you first need to make sure the qlib's data is put in `data/qlib_cn_stock` (because its CSI file is needed).
 Next, you should put `SH000300_orig.csv` (uploaded in the WeChat group) in `data` folder.
 Then, you can run the following command to convert wind data to qlib format:
 

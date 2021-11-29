@@ -1,6 +1,7 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 import copy
+from multiprocessing import Value
 from qlib.backtest.signal import Signal, create_signal_from
 from typing import Dict, List, Text, Tuple, Union
 from qlib.data.dataset import Dataset
@@ -153,6 +154,7 @@ class TopkDropoutStrategy(BaseStrategy):
         buy_order_list = []
         # load score
         cash = current_temp.get_cash()
+        #print(f"=> Starting from {cash}")
         current_stock_list = current_temp.get_stock_list()
         # last position (sorted by score)
         last = pred_score.reindex(current_stock_list).sort_values(ascending=False).index
@@ -221,6 +223,9 @@ class TopkDropoutStrategy(BaseStrategy):
                     )
                     # update cash
                     cash += trade_val - trade_cost
+                    if cash != cash:
+                        print(f"=> Sell {code} with {sell_amount} at {trade_start_time} | {trade_val} | cash: {cash}")
+                        raise ValueError
         # buy new stock
         # note the current has been changed
         current_stock_list = current_temp.get_stock_list()
@@ -249,6 +254,9 @@ class TopkDropoutStrategy(BaseStrategy):
                 end_time=trade_end_time,
                 direction=Order.BUY,  # 1 for buy
             )
+            if buy_amount != buy_amount:
+                print(f"=> Buy {code} with {buy_amount} at {trade_start_time} | {value} {buy_price}")
+                raise ValueError
             buy_order_list.append(buy_order)
         return TradeDecisionWO(sell_order_list + buy_order_list, self)
 

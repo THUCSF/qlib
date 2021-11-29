@@ -398,13 +398,15 @@ class CustomAlpha(Alpha158):
         **kwargs):
         self.window = kwargs["window"]
         super().__init__(instruments, start_time, end_time, freq, infer_processors, learn_processors, fit_start_time, fit_end_time, process_type, filter_pipe, inst_processor, **kwargs)
-    
 
     def get_feature_config(self):
         conf = {
             "diffprice": {
                 "windows": list(range(self.window)),
                 "feature": ["OPEN", "HIGH", "LOW", "CLOSE"],
+            },
+            "ema_vol_diff": {
+                "windows": list(range(self.window)),
             }
         }
         return self.parse_config_to_fields(conf)
@@ -472,7 +474,11 @@ class CustomAlpha(Alpha158):
             for field in feature:
                 field = field.lower()
                 fields += [f"{REF(field, d)}/{REF('close', d + 1)} - 1" for d in windows]
-                names += [field.upper() + str(d) for d in windows]
+                names += [f"DIFF{field.upper()}{d}" for d in windows]
+        if "ema_vol_diff" in config:
+            windows = config["ema_vol_diff"].get("windows", range(10))
+            fields += [f"{REF('volume', d)}/EMA($volume, {len(windows)}) - 1" for d in windows]
+            names += ["EVD" + str(d) for d in windows]
         if "volume" in config:
             windows = config["volume"].get("windows", range(10))
             fields += ["Ref($volume, %d)/$volume" % d if d != 0 else "$volume/$volume" for d in windows]

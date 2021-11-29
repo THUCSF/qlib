@@ -9,6 +9,7 @@ examples/project1/results
 
 *mlruns
 *.pyc
+*.npy
 *.pyd
 *.so
 .ipynb
