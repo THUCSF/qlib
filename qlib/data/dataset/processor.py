@@ -110,7 +110,8 @@ class DropnaLabel(DropnaProcessor):
 
     def is_for_infer(self) -> bool:
         """The samples are dropped according to label. So it is not usable for inference"""
-        return False
+        #return False
+        return True # [Jianjin] Dangerous, but used to avoid nan during testing
 
 
 class DropCol(Processor):

@@ -410,6 +410,7 @@ class PortAnaRecord(RecordTemp):
         portfolio_metric_dict, indicator_dict = normal_backtest(
             executor=self.executor_config, strategy=self.strategy_config, **self.backtest_config
         )
+
         for _freq, (report_normal, positions_normal) in portfolio_metric_dict.items():
             self.save(**{f"report_normal_{_freq}.pkl": report_normal})
             self.save(**{f"positions_normal_{_freq}.pkl": positions_normal})
@@ -448,6 +449,7 @@ class PortAnaRecord(RecordTemp):
                 pprint(analysis["excess_return_without_cost"])
                 pprint(f"The following are analysis results of the excess return with cost({_analysis_freq}).")
                 pprint(analysis["excess_return_with_cost"])
+                self.analysis = analysis
 
         for _analysis_freq in self.indicator_analysis_freq:
             if _analysis_freq not in indicator_dict:

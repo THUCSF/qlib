@@ -73,16 +73,15 @@ class Dataset(Serializable):
 
 class DatasetH(Dataset):
     """
-    Dataset with Data(H)andler
+        Dataset with Data(H)andler
 
-    User should try to put the data preprocessing functions into handler.
-    Only following data processing functions should be placed in Dataset:
+        User should try to put the data preprocessing functions into handler.
+        Only following data processing functions should be placed in Dataset:
 
-    - The processing is related to specific model.
+        - The processing is related to specific model.
 
-    - The processing is related to data split.
+        - The processing is related to data split.
     """
-
     def __init__(self, handler: Union[Dict, DataHandler], segments: Dict[Text, Tuple], **kwargs):
         """
         Setup the underlying data.
@@ -116,6 +115,65 @@ class DatasetH(Dataset):
         self.segments = segments.copy()
         self.fetch_kwargs = {}
         super().__init__(**kwargs)
+
+    def prepare(
+        self,
+        segments: Union[List[Text], Tuple[Text], Text, slice],
+        col_set=DataHandler.CS_ALL,
+        data_key=DataHandlerLP.DK_I,
+        **kwargs,
+    ) -> Union[List[pd.DataFrame], pd.DataFrame]:
+        """
+        Prepare the data for learning and inference.
+
+        Parameters
+        ----------
+        segments : Union[List[Text], Tuple[Text], Text, slice]
+            Describe the scope of the data to be prepared
+            Here are some examples:
+
+            - 'train'
+
+            - ['train', 'valid']
+
+        col_set : str
+            The col_set will be passed to self.handler when fetching data.
+        data_key : str
+            The data to fetch:  DK_*
+            Default is DK_I, which indicate fetching data for **inference**.
+
+        kwargs :
+            The parameters that kwargs may contain:
+                flt_col : str
+                    It only exists in TSDatasetH, can be used to add a column of data(True or False) to filter data.
+                    This parameter is only supported when it is an instance of TSDatasetH.
+
+        Returns
+        -------
+        Union[List[pd.DataFrame], pd.DataFrame]:
+
+        Raises
+        ------
+        NotImplementedError:
+        """
+        logger = get_module_logger("DatasetH")
+        fetch_kwargs = {"col_set": col_set}
+        fetch_kwargs.update(kwargs)
+        if "data_key" in getfullargspec(self.handler.fetch).args:
+            fetch_kwargs["data_key"] = data_key
+        else:
+            logger.info(f"data_key[{data_key}] is ignored.")
+
+        # Handle all kinds of segments format
+        if isinstance(segments, (list, tuple)):
+            return [self._prepare_seg(slice(*self.segments[seg]), **fetch_kwargs) for seg in segments]
+        elif isinstance(segments, str):
+            return self._prepare_seg(slice(*self.segments[segments]), **fetch_kwargs)
+        elif isinstance(segments, slice):
+            return self._prepare_seg(segments, **fetch_kwargs)
+        else:
+            raise NotImplementedError(f"This type of input is not supported")
+
 
     def config(self, handler_kwargs: dict = None, **kwargs):
         """
@@ -176,64 +234,6 @@ class DatasetH(Dataset):
             return self.handler.fetch(slc, **kwargs, **self.fetch_kwargs)
         else:
             return self.handler.fetch(slc, **kwargs)
-
-    def prepare(
-        self,
-        segments: Union[List[Text], Tuple[Text], Text, slice],
-        col_set=DataHandler.CS_ALL,
-        data_key=DataHandlerLP.DK_I,
-        **kwargs,
-    ) -> Union[List[pd.DataFrame], pd.DataFrame]:
-        """
-        Prepare the data for learning and inference.
-
-        Parameters
-        ----------
-        segments : Union[List[Text], Tuple[Text], Text, slice]
-            Describe the scope of the data to be prepared
-            Here are some examples:
-
-            - 'train'
-
-            - ['train', 'valid']
-
-        col_set : str
-            The col_set will be passed to self.handler when fetching data.
-        data_key : str
-            The data to fetch:  DK_*
-            Default is DK_I, which indicate fetching data for **inference**.
-
-        kwargs :
-            The parameters that kwargs may contain:
-                flt_col : str
-                    It only exists in TSDatasetH, can be used to add a column of data(True or False) to filter data.
-                    This parameter is only supported when it is an instance of TSDatasetH.
-
-        Returns
-        -------
-        Union[List[pd.DataFrame], pd.DataFrame]:
-
-        Raises
-        ------
-        NotImplementedError:
-        """
-        logger = get_module_logger("DatasetH")
-        fetch_kwargs = {"col_set": col_set}
-        fetch_kwargs.update(kwargs)
-        if "data_key" in getfullargspec(self.handler.fetch).args:
-            fetch_kwargs["data_key"] = data_key
-        else:
-            logger.info(f"data_key[{data_key}] is ignored.")
-
-        # Handle all kinds of segments format
-        if isinstance(segments, (list, tuple)):
-            return [self._prepare_seg(slice(*self.segments[seg]), **fetch_kwargs) for seg in segments]
-        elif isinstance(segments, str):
-            return self._prepare_seg(slice(*self.segments[segments]), **fetch_kwargs)
-        elif isinstance(segments, slice):
-            return self._prepare_seg(segments, **fetch_kwargs)
-        else:
-            raise NotImplementedError(f"This type of input is not supported")
 
 
 class TSDataSampler:
