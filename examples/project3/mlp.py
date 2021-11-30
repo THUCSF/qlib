@@ -138,6 +138,7 @@ def experiment(n_layer, winsize):
   with R.start(experiment_name="train_model"):
     R.log_params(**flatten_dict(task))
     model.fit(dataset)
+    best_score = model.best_score
     R.save_objects(trained_model=model)
     rid = R.get_recorder().id
 
@@ -162,13 +163,15 @@ def experiment(n_layer, winsize):
   print(res)
   keys = ['mean', 'std', 'annualized_return', 'max_drawdown']
   items = ['excess_return_with_cost', 'excess_return_without_cost']
-  return res['excess_return_without_cost'].risk['annualized_return']
+  return {
+    "return" : res['excess_return_without_cost'].risk['annualized_return'],
+    "mse" : -best_score}
 
 
 def str_table_single_std(dic, output_std=True):
   row_names = list(dic.keys())
   col_names = list(dic[row_names[0]].keys())
-  strs = [col_names]
+  strs = [[str(c) for c in col_names]]
   for row_name in row_names:
     if len(dic[row_name]) == 0:
       continue
@@ -220,30 +223,39 @@ def str_latex_table(strs):
   return "\n".join(s)
 
 
+def dic_mean_std(dic):
+  new_dic = {}
+  for row_key in dic:
+    new_dic[row_key] = {}
+    for col_key in dic[row_key]:
+      obs = np.array(dic[row_key][col_key])
+      mean, std = obs.mean(), obs.std(ddof=1)
+      new_dic[row_key][col_key] = {"mean": mean, "std": std}
+  return new_dic
+
+
 if __name__ == "__main__":
-  res = {}
+  ret_dic, mse_dic = {}, {}
   n_repeats = 5
   n_layers = [1, 2, 4, 8]
   win_sizes = [1, 2, 4, 8, 16, 32]
   for n_layer in n_layers:
-    res[n_layer] = {}
+    ret_dic[n_layer] = {}
+    mse_dic[n_layer] = {}
     for win_size in win_sizes:
-      res[n_layer][win_size] = []
+      ret_dic[n_layer][win_size] = []
+      mse_dic[n_layer][win_size] = []
 
   for repeat in range(n_repeats):
     for n_layer in n_layers:
       for win_size in win_sizes:
-        val = experiment(n_layer, win_size)
-        res[n_layer][win_size].append(val)
-        np.save("tmp.npy", res)
+        dic = experiment(n_layer, win_size)
+        ret_dic[n_layer][win_size].append(dic["return"])
+        mse_dic[n_layer][win_size].append(dic["mse"])
 
-  for n_layer in n_layers:
-    for win_size in win_sizes:
-      obs = np.array(res[n_layer][win_size])
-      mean, std = obs.mean(), obs.std(ddof=1)
-      res[n_layer][win_size] = {"mean": mean, "std": std}
-  strs = str_table_single_std(res)
-  s = str_latex_table(strs)
-  with open("./res.tex", "w") as f:
-    f.write(s)
-  
+  ret_dic_agg = dic_mean_std(ret_dic)
+  mse_dic_agg = dic_mean_std(mse_dic)
+  with open("./ret.tex", "w") as f:
+    f.write(str_latex_table(str_table_single_std(ret_dic_agg)))
+  with open("./mse.tex", "w") as f:
+    f.write(str_latex_table(str_table_single_std(mse_dic_agg)))

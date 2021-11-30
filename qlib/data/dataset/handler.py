@@ -231,7 +231,7 @@ class DataHandler(Serializable):
             # squeeze index
             if isinstance(selector, (str, pd.Timestamp)):
                 data_df = data_df.reset_index(level=level, drop=True)
-        return data_df
+        return data_df.astype("float32") # convenient conversion
 
     def get_cols(self, col_set=CS_ALL) -> list:
         """
