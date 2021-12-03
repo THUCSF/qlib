@@ -268,6 +268,7 @@ class RobustZScoreNorm(Processor):
         self.fit_end_time = fit_end_time
         self.fields_group = fields_group
         self.clip_outlier = clip_outlier
+        print(f"=> RobustZScoreNorm {fit_start_time} - {fit_end_time}")
 
     def fit(self, df):
         df = fetch_df_by_index(df, slice(self.fit_start_time, self.fit_end_time), level="datetime")
@@ -277,6 +278,7 @@ class RobustZScoreNorm(Processor):
         self.std_train = np.nanmedian(np.abs(X - self.mean_train), axis=0)
         self.std_train += EPS
         self.std_train *= 1.4826
+        print(f"=> RobustZScoreNorm fit on {self.fit_start_time} - {self.fit_end_time}")
 
     def __call__(self, df):
         X = df[self.cols]

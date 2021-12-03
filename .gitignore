@@ -6,6 +6,7 @@ examples/project1/
 examples/project1/expr
 examples/project1/results
 examples/project1/results
+examples/project3/expr
 
 *mlruns
 *.pyc

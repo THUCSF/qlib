@@ -155,7 +155,6 @@ class DNNModelPytorch(Model):
         evals_result=dict(),
         save_path=None,
     ):
-
         df_train, df_valid = dataset.prepare(
             ["train", "valid"],
             col_set=["feature", "label"],
@@ -201,7 +200,6 @@ class DNNModelPytorch(Model):
 
         if self.use_gpu:
             torch.cuda.empty_cache()
-
 
     def train_epoch(self, x_train, y_train):
         x_train_values = x_train.values
@@ -378,12 +376,25 @@ class DNNModelPytorch(Model):
     def predict(self, dataset: DatasetH, segment: Union[Text, slice] = "test"):
         if not self.fitted:
             raise ValueError("model is not fitted yet!")
-        x_test_pd = dataset.prepare(segment, col_set="feature", data_key=DataHandlerLP.DK_I)
-        x_test = torch.from_numpy(x_test_pd.values).float().to(self.device)
+
+        x_test = dataset.prepare(segment, col_set="feature", data_key=DataHandlerLP.DK_I)
+        index = x_test.index
         self.model.eval()
-        with torch.no_grad():
-            preds = self.model(x_test).detach().cpu().numpy()
-        return pd.Series(np.squeeze(preds), index=x_test_pd.index)
+        x_values = x_test.values
+        sample_num = x_values.shape[0]
+        preds = []
+
+        for begin in range(sample_num)[:: self.batch_size]:
+            if sample_num - begin < self.batch_size:
+                end = sample_num
+            else:
+                end = begin + self.batch_size
+            x_batch = torch.from_numpy(x_values[begin:end]).float().to(self.device)
+            with torch.no_grad():
+                pred = self.model(x_batch).detach().cpu().numpy()
+            preds.append(pred)
+
+        return pd.Series(np.concatenate(preds), index=index)
 
     def save(self, filename, **kwargs):
         with save_multiple_parts_file(filename) as model_dir:
