@@ -400,17 +400,26 @@ class CustomAlpha(Alpha158):
         super().__init__(instruments, start_time, end_time, freq, infer_processors, learn_processors, fit_start_time, fit_end_time, process_type, filter_pipe, inst_processor, **kwargs)
 
     def get_feature_config(self):
+        """
+        "diffprice": {
+            "windows": list(range(self.window)),
+            "feature": ["OPEN", "HIGH", "LOW", "CLOSE"],
+        },
+        "ema_vol_diff": {
+            "windows": list(range(self.window)),
+        }
+        """
+
         conf = {
-            "diffprice": {
+            "price": {
                 "windows": list(range(self.window)),
                 "feature": ["OPEN", "HIGH", "LOW", "CLOSE"],
             },
-            "ema_vol_diff": {
+            "volume": {
                 "windows": list(range(self.window)),
             }
         }
         return self.parse_config_to_fields(conf)
-
 
     def get_label_config(self):
         return (["Ref($close, -2)/Ref($close, -1) - 1"], ["LABEL0"])
@@ -466,7 +475,8 @@ class CustomAlpha(Alpha158):
             feature = config["price"].get("feature", ["OPEN", "HIGH", "LOW", "CLOSE", "VWAP"])
             for field in feature:
                 field = field.lower()
-                fields += ["Ref($%s, %d)/$close" % (field, d) if d != 0 else "$%s/$close" % field for d in windows]
+                #fields += ["Ref($%s, %d)/$close" % (field, d) if d != 0 else "$%s/$close" % field for d in windows]
+                fields += ["Ref($%s, %d)" % (field, d) if d != 0 else "$%s" % field for d in windows]
                 names += [field.upper() + str(d) for d in windows]
         if "diffprice" in config:
             windows = config["diffprice"].get("windows", range(10))
@@ -481,7 +491,8 @@ class CustomAlpha(Alpha158):
             names += ["EVD" + str(d) for d in windows]
         if "volume" in config:
             windows = config["volume"].get("windows", range(10))
-            fields += ["Ref($volume, %d)/$volume" % d if d != 0 else "$volume/$volume" for d in windows]
+            #fields += ["Ref($volume, %d)/$volume" % d if d != 0 else "$volume/$volume" for d in windows]
+            fields += ["Ref($volume, %d)" % d if d != 0 else "$volume" for d in windows]
             names += ["VOLUME" + str(d) for d in windows]
         if "rolling" in config:
             windows = config["rolling"].get("windows", [5, 10, 20, 30, 60])

@@ -334,7 +334,8 @@ class Exchange:
             # According to wind data, the suspended has a clear indicator and the volume is 0.
             # So for conveniency, let's use zero volume
             no_close = self.quote.get_data(stock_id, start_time, end_time, "$close") is None
-            zero_volume = self.quote.get_data(stock_id, start_time, end_time, "$volume") < 1e-4
+            volume = self.quote.get_data(stock_id, start_time, end_time, "$volume")
+            zero_volume = (volume is None) or (volume < 1e-4)
             return no_close or zero_volume
         else:
             return True

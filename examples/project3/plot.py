@@ -3,22 +3,16 @@
 import sys
 sys.path.insert(0, "../..")
 
-import qlib, torch, os
+import qlib, torch, os, argparse, glob
 import numpy as np
 import pandas as pd
-from qlib.config import REG_CN
-from qlib.contrib.model.gbdt import LGBModel
-from qlib.contrib.data.handler import Alpha158
-from qlib.contrib.evaluate import (
-  backtest as normal_backtest,
-  risk_analysis,
-)
-from qlib.utils import init_instance_by_config
-from qlib.workflow import R
-from qlib.workflow.record_temp import SignalRecord, PortAnaRecord
-from qlib.utils import flatten_dict
+import matplotlib
+import matplotlib.pyplot as plt
+matplotlib.style.use('seaborn-poster')
+matplotlib.style.use('ggplot')
 
-from mlp import get_train_config
+from qlib.config import REG_CN
+from qlib.utils import init_instance_by_config
 
 
 provider_uri = "../../data/china_stock_qlib_adj"
@@ -38,27 +32,34 @@ def get_data(df, N=5):
   return selected_codes, selected_dates
 
 
-def experiment(args):
-  model_dir = f"./{expr_dir}/l{n_layer}_w{winsize}"
-  if not os.path.exists(model_dir):
-    os.makedirs(model_dir)
+def predict_dataframe(model, df, device="cuda", batch_size=1024):
+  N = df.shape[0]
+  arr = df.values
+  preds = []
+  with torch.no_grad():
+    for begin in range(N)[:: batch_size]:
+      end = min(N, begin + batch_size)
+      x_batch = torch.from_numpy(arr[begin:end, :-1]).float().to(device)
+      pred = model.model(x_batch).squeeze()
+      preds.append(pred.detach().cpu().numpy())
+  return pd.Series(np.concatenate(preds), index=df.index)
+
+
+def experiment(expr_dir, dataset_config, models, args):
   # model initiaiton
-  task = get_train_config(n_layer, winsize)
-  model = init_instance_by_config(task["model"])
-  dataset = init_instance_by_config(task["dataset"])
-
-  expr_dict = torch.load(f"{model_dir}/expr.pth")
-  model.model.load_state_dict(expr_dict["model_param"])
+  dataset = init_instance_by_config(dataset_config)
   train_df, val_df, test_df = dataset.prepare(["train", "valid", "test"])
+  device = f"cuda:{args.gpu_id}"
 
-  codes, dates = get_data(train_df)
-  for code in codes:
-    x = torch.from_numpy(train_df.loc[code, dates]).cuda()
-    y = model.model(x)
+  for i, model in enumerate(models):
+    y = train_df.values[:, -1]
+    pred = predict_dataframe(model, train_df, device)
+    mask = (y >= -0.1) & (y <= 0.1)
+    plt.scatter(y[mask], pred[mask], s=1, alpha=0.1)
+    plt.savefig(f"{expr_dir}/r{i}_scatter.png")
+    plt.close()
 
-
-  return model, train_df, val_df, test_df
-
+  return y, pred
 
 
 def str_table_single_std(dic, output_std=True):
@@ -127,17 +128,28 @@ def dic_mean_std(dic):
   return new_dic
 
 
-
 if __name__ == "__main__":
-  ret_dic, mse_dic = {}, {}
-  n_repeats = 5
-  n_layers = [1, 2, 4, 8]
-  win_sizes = [1, 2, 4, 8, 16, 32]
+  parser = argparse.ArgumentParser()
+  parser.add_argument("--gpu-id", default=0, type=int)
+  parser.add_argument("--name", default="raw", type=str,
+    help="raw | zscorenorm")
+  args = parser.parse_args()
 
-  for repeat in range(n_repeats):
-    for n_layer in n_layers:
-      for win_size in win_sizes:
-        model, train_df, val_df, test_df = experiment(n_layer, win_size)
-        break
-      break
-    break
+  expr_dir = f"expr/{args.name}"
+  model_dir = os.listdir(expr_dir)
+  model_dir.sort()
+
+  for sery_name in model_dir:
+    expr_names = glob.glob(f"{expr_dir}/{sery_name}/*.pth")
+    models = []
+    for expr_name in expr_names:
+      print(expr_name)
+      expr_res = torch.load(expr_name)
+      model = init_instance_by_config(expr_res["model_config"])
+      model.model.load_state_dict(expr_res["model_param"])
+      model.model = model.model.to(f"cuda:{args.gpu_id}")
+      models.append(model)
+    dataset_config = expr_res["dataset_config"]
+    y, pred = experiment(f"{expr_dir}/{sery_name}/", dataset_config, models, args)
+
+

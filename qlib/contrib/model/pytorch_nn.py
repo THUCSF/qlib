@@ -50,7 +50,7 @@ class DNNModelPytorch(Model):
         output_dim=1,
         layers=(256,),
         lr=0.001,
-        n_epochs=200,
+        max_steps=200, # max steps is n_epoch for fit_epoch
         batch_size=4096,
         early_stop=20,
         eval_steps=20,
@@ -68,7 +68,7 @@ class DNNModelPytorch(Model):
         # set hyper-parameters.
         self.layers = layers
         self.lr = lr
-        self.n_epochs = n_epochs
+        self.max_steps = max_steps
         self.batch_size = batch_size
         self.early_stop = early_stop
         self.eval_steps = eval_steps
@@ -82,7 +82,7 @@ class DNNModelPytorch(Model):
             "DNN parameters setting:"
             "\nlayers : {}"
             "\nlr : {}"
-            "\nn_epochs : {}"
+            "\nmax_steps : {}"
             "\nbatch_size : {}"
             "\nearly_stop : {}"
             "\neval_steps : {}"
@@ -95,7 +95,7 @@ class DNNModelPytorch(Model):
             "\nweight_decay : {}".format(
                 layers,
                 lr,
-                n_epochs,
+                max_steps,
                 batch_size,
                 early_stop,
                 eval_steps,
@@ -149,7 +149,7 @@ class DNNModelPytorch(Model):
         mask = torch.isfinite(label)
         return -self.loss_fn(pred[mask], label[mask])
 
-    def fit(
+    def fit_epoch(
         self,
         dataset: DatasetH,
         evals_result=dict(),
@@ -176,7 +176,7 @@ class DNNModelPytorch(Model):
         self.logger.info("training...")
         self.fitted = True
 
-        for step in range(self.n_epochs):
+        for step in range(self.max_steps):
             self.train_epoch(x_train, y_train)
             train_loss, train_score = self.test_epoch(x_train, y_train)
             val_loss, val_score = self.test_epoch(x_valid, y_valid)
@@ -256,7 +256,6 @@ class DNNModelPytorch(Model):
             loss = loss + (-(pred * sign)).clamp(min=0).mean()
         return loss
 
-    """
     def fit(
         self,
         dataset: DatasetH,
@@ -269,8 +268,6 @@ class DNNModelPytorch(Model):
         )
         x_train, y_train = df_train["feature"], df_train["label"]
         x_valid, y_valid = df_valid["feature"], df_valid["label"]
-
-        print(x_train.shape, y_train.shape, x_train.max(), y_train.max())
 
         try:
             wdf_train, wdf_valid = dataset.prepare(["train", "valid"], col_set=["weight"], data_key=DataHandlerLP.DK_L)
@@ -300,7 +297,7 @@ class DNNModelPytorch(Model):
         w_val_auto = torch.from_numpy(w_valid.values).float().to(self.device)
 
         for step in range(self.max_steps):
-            if stop_steps >= self.early_stop_rounds:
+            if stop_steps >= self.early_stop:
                 if verbose:
                     self.logger.info("\tearly stop")
                 break
@@ -311,14 +308,12 @@ class DNNModelPytorch(Model):
             x_batch_auto = x_train_values[choice].to(self.device)
             y_batch_auto = y_train_values[choice].to(self.device)
             w_batch_auto = w_train_values[choice].to(self.device)
-
             # forward
             preds = self.model(x_batch_auto)
             cur_loss = self.get_loss(preds, w_batch_auto, y_batch_auto, self.loss_type)
             cur_loss.backward()
             self.train_optimizer.step()
             loss.update(cur_loss.item())
-            R.log_metrics(train_loss=loss.avg, step=step)
 
             # validation
             train_loss += loss.val
@@ -335,7 +330,7 @@ class DNNModelPytorch(Model):
                     preds = self.model(x_val_auto)
                     cur_loss_val = self.get_loss(preds, w_val_auto, y_val_auto, self.loss_type)
                     loss_val.update(cur_loss_val.item())
-                R.log_metrics(val_loss=loss_val.val, step=step)
+
                 if verbose:
                     self.logger.info(
                         "[Epoch {}]: train_loss {:.6f}, valid_loss {:.6f}".format(step, train_loss, loss_val.val)
@@ -355,15 +350,15 @@ class DNNModelPytorch(Model):
                 train_loss = 0
                 # update learning rate
                 self.scheduler.step(cur_loss_val)
-
+        self.best_score = -best_loss
         # restore the optimal parameters after training
         self.model.load_state_dict(torch.load(save_path))
         if self.use_gpu:
             torch.cuda.empty_cache()
-    """
+
 
     def get_loss(self, pred, w, target, loss_type):
-        if loss_type == "mse":
+        if "mse" in loss_type:
             sqr_loss = torch.mul(pred - target, pred - target)
             loss = torch.mul(sqr_loss, w).mean()
             return loss
@@ -383,16 +378,13 @@ class DNNModelPytorch(Model):
         x_values = x_test.values
         sample_num = x_values.shape[0]
         preds = []
-
-        for begin in range(sample_num)[:: self.batch_size]:
-            if sample_num - begin < self.batch_size:
-                end = sample_num
-            else:
-                end = begin + self.batch_size
-            x_batch = torch.from_numpy(x_values[begin:end]).float().to(self.device)
-            with torch.no_grad():
-                pred = self.model(x_batch).detach().cpu().numpy()
-            preds.append(pred)
+        print(x_values)
+        with torch.no_grad():
+            for begin in range(sample_num)[:: self.batch_size]:
+                end = min(sample_num, begin + self.batch_size)
+                x_batch = torch.from_numpy(x_values[begin:end]).float().to(self.device)
+                pred = self.model(x_batch).squeeze()
+                preds.append(pred.detach().cpu().numpy())
 
         return pd.Series(np.concatenate(preds), index=index)
 
@@ -438,8 +430,6 @@ class Net(nn.Module):
         super(Net, self).__init__()
         layers = [input_dim] + list(layers)
         dnn_layers = []
-        drop_input = nn.Dropout(0.05)
-        dnn_layers.append(drop_input)
         for i, (input_dim, hidden_units) in enumerate(zip(layers[:-1], layers[1:])):
             fc = nn.Linear(input_dim, hidden_units)
             activation = nn.LeakyReLU(negative_slope=0.1, inplace=False)
@@ -448,7 +438,7 @@ class Net(nn.Module):
             dnn_layers.append(seq)
         drop_input = nn.Dropout(0.05)
         dnn_layers.append(drop_input)
-        if loss == "mse":
+        if "mse" in loss:
             fc = nn.Linear(hidden_units, output_dim)
             dnn_layers.append(fc)
 
