@@ -30,13 +30,14 @@ def mlp_zscorenorm():
 
 def mlp_raw():
   cmds = []
-  cmd = "python mlp.py --name raw --repeat-ind {repeat_ind} --n-layer {n_layer} --win-size {win_size}"
+  cmd = "python mlp.py --name raw --repeat-ind {repeat_ind} --n-layer {n_layer} --win-size {win_size} --dataset {ds}"
   N = 256
   for n_layer in [1, 2, 4, 8]:
     for win_size in [1, 4, 16, 32]:
       for repeat_ind in range(5):
-        cmds.append(cmd.format(repeat_ind=repeat_ind,
-          n_layer=n_layer, win_size=win_size))
+        for ds in ["china_stock_qlib_adj", "qlib_cn_stock"]:
+          cmds.append(cmd.format(repeat_ind=repeat_ind,
+            n_layer=n_layer, win_size=win_size, ds=ds))
   return cmds
 
 

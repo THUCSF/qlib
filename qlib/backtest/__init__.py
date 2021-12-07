@@ -239,6 +239,8 @@ def backtest(
         It is organized in a dict format
 
     """
+    print(start_time, end_time, strategy, executor, benchmark, account, exchange_kwargs, pos_type)
+    
     trade_strategy, trade_executor = get_strategy_executor(
         start_time,
         end_time,

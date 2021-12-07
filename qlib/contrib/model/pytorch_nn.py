@@ -378,7 +378,6 @@ class DNNModelPytorch(Model):
         x_values = x_test.values
         sample_num = x_values.shape[0]
         preds = []
-        print(x_values)
         with torch.no_grad():
             for begin in range(sample_num)[:: self.batch_size]:
                 end = min(sample_num, begin + self.batch_size)

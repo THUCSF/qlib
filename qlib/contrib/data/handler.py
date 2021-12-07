@@ -401,21 +401,21 @@ class CustomAlpha(Alpha158):
 
     def get_feature_config(self):
         """
-        "diffprice": {
-            "windows": list(range(self.window)),
-            "feature": ["OPEN", "HIGH", "LOW", "CLOSE"],
-        },
-        "ema_vol_diff": {
-            "windows": list(range(self.window)),
-        }
-        """
-
-        conf = {
             "price": {
                 "windows": list(range(self.window)),
                 "feature": ["OPEN", "HIGH", "LOW", "CLOSE"],
             },
             "volume": {
+                "windows": list(range(self.window)),
+            }
+        """
+
+        conf = {
+            "diffprice": {
+                "windows": list(range(self.window)),
+                "feature": ["OPEN", "HIGH", "LOW", "CLOSE"],
+            },
+            "ema_vol_diff": {
                 "windows": list(range(self.window)),
             }
         }

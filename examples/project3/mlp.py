@@ -10,8 +10,8 @@ import numpy as np
 import pandas as pd
 from qlib.config import REG_CN
 from qlib.utils import init_instance_by_config
-from qlib.workflow import R
-from qlib.workflow.record_temp import SignalRecord, PortAnaRecord
+from qlib.contrib.evaluate import risk_analysis
+from qlib.backtest import backtest
 
 
 def get_train_config(args):
@@ -39,29 +39,29 @@ def get_train_config(args):
   # offical configurations - if specified
   if "official" in args.name:
     infer_processors = [
-        {
-            "class" : "DropCol", 
-            "kwargs":{"col_list": ["VWAP0"]}
-        },
-        {
-             "class" : "CSZFillna", 
-             "kwargs":{"fields_group": "feature"}
-        }
+      {
+        "class" : "DropCol", 
+        "kwargs":{"col_list": ["VWAP0"]}
+      },
+      {
+        "class" : "CSZFillna", 
+        "kwargs":{"fields_group": "feature"}
+      }
     ]
     learn_processors = [
-        {
-            "class" : "DropCol", 
-            "kwargs":{"col_list": ["VWAP0"]}
-        },
-        {
-            "class" : "DropnaProcessor", 
-            "kwargs":{"fields_group": "feature"}
-        },
-        "DropnaLabel",
-        {
-            "class": "CSZScoreNorm", 
-            "kwargs": {"fields_group": "label"}
-        }
+      {
+        "class" : "DropCol", 
+        "kwargs":{"col_list": ["VWAP0"]}
+      },
+      {
+        "class" : "DropnaProcessor", 
+        "kwargs":{"fields_group": "feature"}
+      },
+      "DropnaLabel",
+      {
+        "class": "CSZScoreNorm", 
+        "kwargs": {"fields_group": "label"}
+      }
     ]
     data_handler_config = {
       "start_time": "2011-01-01",
@@ -139,7 +139,7 @@ def get_train_config(args):
   return task
 
 
-def get_eval_config(model, dataset):
+def get_eval_config(model, dataset, args):
   port_analysis_config = {
     "executor": {
       "class": "SimulatorExecutor",
@@ -192,18 +192,18 @@ def main(args):
   best_score = model.best_score
 
   # backtest and analysis
-  port_analysis_config = get_eval_config(model, dataset)
-  with R.start(experiment_name="backtest_analysis"):
-    # prediction
-    recorder = R.get_recorder()
-    sr = SignalRecord(model, dataset, recorder)
-    sr.generate()
+  port_analysis_config = get_eval_config(model, dataset, args)
+  portfolio_metric_dict, indicator_dict = backtest(
+    executor=port_analysis_config["executor"],
+    strategy=port_analysis_config["strategy"],
+    **port_analysis_config["backtest"])
+  res = {}
+  for _freq, (report_normal, positions_normal) in portfolio_metric_dict.items():
+    res["excess_return_without_cost"] = risk_analysis(
+      report_normal["return"] - report_normal["bench"], freq=_freq)
+    res["excess_return_with_cost"] = risk_analysis(
+      report_normal["return"] - report_normal["bench"] - report_normal["cost"], freq=_freq)
 
-    # backtest & analysis
-    par = PortAnaRecord(recorder, port_analysis_config, "day")
-    par.generate()
-  
-  res = par.analysis
   keys = ['mean', 'std', 'annualized_return', 'max_drawdown']
   items = ['excess_return_with_cost', 'excess_return_without_cost']
   eval_result = {
@@ -214,7 +214,7 @@ def main(args):
     "model_config" : task["model"],
     "dataset_config" : task["dataset"],
     "model_param": model.model.state_dict(),
-    "eval_result" : eval_result}
+    "eval_result" : eval_result}, portfolio_metric_dict, indicator_dict
 
 
 if __name__ == "__main__":
@@ -227,13 +227,14 @@ if __name__ == "__main__":
   parser.add_argument("--benchmark", default="SH000300", type=str)
   parser.add_argument("--name", default="raw", type=str,
     help="raw | zscorenorm")
-  parser.add_argument("--dataset", default="china_stock_qlib_adj")
+  parser.add_argument("--dataset", default="china_stock_qlib_adj",
+    help="qlib_cn_stock | china_stock_qlib_adj")
   args = parser.parse_args()
 
   provider_uri = f"../../data/{args.dataset}"
   qlib.init(provider_uri=provider_uri, region=REG_CN)
 
-  model_dir = f"expr/{args.name}/l{args.n_layer}_w{args.win_size}"
+  model_dir = f"expr/{args.name}/{args.dataset}/l{args.n_layer}_w{args.win_size}"
   if not os.path.exists(model_dir):
     os.makedirs(model_dir)
   

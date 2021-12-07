@@ -15,12 +15,6 @@ from qlib.config import REG_CN
 from qlib.utils import init_instance_by_config
 
 
-provider_uri = "../../data/china_stock_qlib_adj"
-qlib.init(provider_uri=provider_uri, region=REG_CN)
-market = "csi300"
-benchmark = "SH000300"
-
-
 def get_data(df, N=5):
   index_df = df.index.to_frame()
   all_codes = index_df.instrument.unique()
@@ -128,28 +122,48 @@ def dic_mean_std(dic):
   return new_dic
 
 
+def set_dic(dic, key1, key2, val):
+  if key1 not in dic:
+    dic[key1] = {}
+  if key2 not in dic[key1]:
+    dic[key1][key2] = []
+  dic[key1][key2].append(val)
+
+
 if __name__ == "__main__":
   parser = argparse.ArgumentParser()
   parser.add_argument("--gpu-id", default=0, type=int)
   parser.add_argument("--name", default="raw", type=str,
     help="raw | zscorenorm")
+  parser.add_argument("--dataset", default="china_stock_qlib_adj",
+    help="qlib_cn_stock | china_stock_qlib_adj")
   args = parser.parse_args()
 
-  expr_dir = f"expr/{args.name}"
-  model_dir = os.listdir(expr_dir)
-  model_dir.sort()
+  provider_uri = f"../../data/{args.dataset}"
+  qlib.init(provider_uri=provider_uri, region=REG_CN)
 
-  for sery_name in model_dir:
-    expr_names = glob.glob(f"{expr_dir}/{sery_name}/*.pth")
+  expr_dir = f"expr/{args.name}"
+
+  model_dirs = glob.glob(f"{expr_dir}/{args.dataset}/*")
+  dic = {}
+  for model_dir in model_dirs:
+    expr_names = glob.glob(f"{model_dir}/*.pth")
     models = []
     for expr_name in expr_names:
       print(expr_name)
       expr_res = torch.load(expr_name)
-      model = init_instance_by_config(expr_res["model_config"])
-      model.model.load_state_dict(expr_res["model_param"])
-      model.model = model.model.to(f"cuda:{args.gpu_id}")
-      models.append(model)
-    dataset_config = expr_res["dataset_config"]
-    y, pred = experiment(f"{expr_dir}/{sery_name}/", dataset_config, models, args)
+      # load model
+      #model = init_instance_by_config(expr_res["model_config"])
+      #model.model.load_state_dict(expr_res["model_param"])
+      #model.model = model.model.to(f"cuda:{args.gpu_id}")
+      #models.append(model)
+      # load evaluation results
+      res = expr_res["eval_result"]
+      args = expr_name[expr_name.rfind("/")+1:].strip().split("_")
+      args = [a[1:] for a in args]
+      set_dic(dic, args[0], args[1], res["return"])
+    #dataset_config = expr_res["dataset_config"]
 
-
+  std_dic = dic_mean_std(dic)
+  with open(f"{expr_dir}/{args.dataset}/res.tex", "w") as f:
+    f.write(str_latex_table(str_table_single_std(std_dic)))
