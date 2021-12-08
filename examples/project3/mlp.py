@@ -214,7 +214,7 @@ def main(args):
     "model_config" : task["model"],
     "dataset_config" : task["dataset"],
     "model_param": model.model.state_dict(),
-    "eval_result" : eval_result}, portfolio_metric_dict, indicator_dict
+    "eval_result" : eval_result}
 
 
 if __name__ == "__main__":

@@ -46,10 +46,28 @@ def experiment(expr_dir, dataset_config, models, args):
   device = f"cuda:{args.gpu_id}"
 
   for i, model in enumerate(models):
+    fig = plt.figure(figsize=(20, 6))
+    ax = plt.subplot(1, 3, 1)
     y = train_df.values[:, -1]
     pred = predict_dataframe(model, train_df, device)
     mask = (y >= -0.1) & (y <= 0.1)
-    plt.scatter(y[mask], pred[mask], s=1, alpha=0.1)
+    ax.scatter(y[mask], pred[mask], s=1, alpha=0.1)
+    ax.set_title("Train")
+
+    y = val_df.values[:, -1]
+    pred = predict_dataframe(model, val_df, device)
+    mask = (y >= -0.1) & (y <= 0.1)
+    ax = plt.subplot(1, 3, 2)
+    ax.scatter(y[mask], pred[mask], s=1, alpha=0.1)
+    ax.set_title("Valid")
+
+    y = test_df.values[:, -1]
+    pred = predict_dataframe(model, test_df, device)
+    mask = (y >= -0.1) & (y <= 0.1)
+    ax = plt.subplot(1, 3, 3)
+    ax.scatter(y[mask], pred[mask], s=1, alpha=0.1)
+    ax.set_title("Test")
+
     plt.savefig(f"{expr_dir}/r{i}_scatter.png")
     plt.close()
 
@@ -111,11 +129,27 @@ def str_latex_table(strs):
   return "\n".join(s)
 
 
-def dic_mean_std(dic):
+def dic_mean_std(dic, sort_int=True):
   new_dic = {}
-  for row_key in dic:
+
+  if sort_int:
+    row_keys = [int(k) for k in dic.keys()]
+    row_keys.sort()
+  else:
+    row_keys = dic.keys()
+
+  for row_key in row_keys:
+    row_key = str(row_key)
     new_dic[row_key] = {}
-    for col_key in dic[row_key]:
+
+    if sort_int:
+      col_keys = [int(k) for k in dic[row_key].keys()]
+      col_keys.sort()
+    else:
+      col_keys = dic[row_key].keys()
+
+    for col_key in col_keys:
+      col_key = str(col_key)
       obs = np.array(dic[row_key][col_key])
       mean, std = obs.mean(), obs.std(ddof=1)
       new_dic[row_key][col_key] = {"mean": mean, "std": std}
@@ -145,24 +179,30 @@ if __name__ == "__main__":
   expr_dir = f"expr/{args.name}"
 
   model_dirs = glob.glob(f"{expr_dir}/{args.dataset}/*")
+  model_dirs.sort()
   dic = {}
   for model_dir in model_dirs:
     expr_names = glob.glob(f"{model_dir}/*.pth")
+    expr_names.sort()
+    if len(expr_names) == 0:
+      continue
     models = []
     for expr_name in expr_names:
       print(expr_name)
       expr_res = torch.load(expr_name)
       # load model
-      #model = init_instance_by_config(expr_res["model_config"])
-      #model.model.load_state_dict(expr_res["model_param"])
-      #model.model = model.model.to(f"cuda:{args.gpu_id}")
-      #models.append(model)
+      model = init_instance_by_config(expr_res["model_config"])
+      model.model.load_state_dict(expr_res["model_param"])
+      model.model = model.model.to(f"cuda:{args.gpu_id}")
+      models.append(model)
       # load evaluation results
       res = expr_res["eval_result"]
-      args = expr_name[expr_name.rfind("/")+1:].strip().split("_")
-      args = [a[1:] for a in args]
-      set_dic(dic, args[0], args[1], res["return"])
-    #dataset_config = expr_res["dataset_config"]
+      cfgs = expr_name.split("/")[-2]
+      cfgs = cfgs[cfgs.rfind("/")+1:].strip().split("_")
+      cfgs = [c[1:] for c in cfgs]
+      set_dic(dic, cfgs[0], cfgs[1], res["return"])
+    dataset_config = expr_res["dataset_config"]
+    experiment(model_dir, dataset_config, models, args)
 
   std_dic = dic_mean_std(dic)
   with open(f"{expr_dir}/{args.dataset}/res.tex", "w") as f:
