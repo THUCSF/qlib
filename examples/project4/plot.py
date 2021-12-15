@@ -27,19 +27,6 @@ def get_data(df, N=5):
   return selected_codes, selected_dates
 
 
-def predict_dataframe(model, df, device="cuda", batch_size=1024):
-  N = df.shape[0]
-  arr = df.values
-  preds = []
-  with torch.no_grad():
-    for begin in range(N)[:: batch_size]:
-      end = min(N, begin + batch_size)
-      x_batch = torch.from_numpy(arr[begin:end, :-1]).float().to(device)
-      pred = model.model(x_batch).squeeze()
-      preds.append(pred.detach().cpu().numpy())
-  return pd.Series(np.concatenate(preds), index=df.index)
-
-
 def plot_scatter_ci(ax, x, y, div_num=20):
   ind = x.argsort()
   xmean = x.mean()
@@ -92,11 +79,26 @@ def plot_scatter_ci(ax, x, y, div_num=20):
   #  ax.set_ylim(bottom=ax1_ylims[1] * ax2_yratio)
 
 
+def assign_5label(df):
+  ret = df.values.squeeze()
+  label = np.zeros_like(ret).astype("int64")
+  label[ret > -0.05] = 1
+  label[ret > -0.01] = 2
+  label[ret > 0.01] = 3
+  label[ret > 0.05] = 4
+  return pd.DataFrame({"class": label}, index=df.index)
+
+
 def experiment(expr_dir, dataset_config, models, model_cfgs, res_dic, args):
   # model initiaiton
   dataset = init_instance_by_config(dataset_config)
-  train_df, val_df, test_df = dataset.prepare(["train", "valid", "test"])
-  device = f"cuda:{args.gpu_id}"
+  train_df, val_df, test_df = dataset.prepare(
+    ["train", "valid", "test"],
+    col_set=["feature", "label"],
+    data_key="infer")
+  x_train, y_train = train_df["feature"], train_df["label"]
+  x_valid, y_valid = val_df["feature"], val_df["label"]
+  x_test, y_test = test_df["feature"], test_df["label"]
 
   for i, model in enumerate(models):
     res, _, _ = simple_backtest(model, dataset, args)
@@ -105,21 +107,21 @@ def experiment(expr_dir, dataset_config, models, model_cfgs, res_dic, args):
 
     fig = plt.figure(figsize=(30, 7))
     ax = plt.subplot(1, 3, 1)
-    y = train_df.values[:, -1]
-    pred = predict_dataframe(model, train_df, device)
+    y = y_train.values.squeeze()
+    pred = model.predict_dataframe(x_train)
     mask = (y >= -0.1) & (y <= 0.1)
     plot_scatter_ci(ax, y[mask], pred[mask])
     ax.set_title(f"Train Return v.s. Pred")
 
-    y = val_df.values[:, -1]
-    pred = predict_dataframe(model, val_df, device)
+    y = y_valid.values.squeeze()
+    pred = model.predict_dataframe(x_valid)
     mask = (y >= -0.1) & (y <= 0.1)
     ax = plt.subplot(1, 3, 2)
     plot_scatter_ci(ax, y[mask], pred[mask])
     ax.set_title(f"Valid Return v.s. Pred")
 
-    y = test_df.values[:, -1]
-    pred = predict_dataframe(model, test_df, device)
+    y = y_test.values.squeeze()
+    pred = model.predict_dataframe(x_test)
     mask = (y >= -0.1) & (y <= 0.1)
     ax = plt.subplot(1, 3, 3)
     plot_scatter_ci(ax, y[mask], pred[mask])

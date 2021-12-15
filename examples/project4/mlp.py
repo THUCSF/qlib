@@ -31,13 +31,9 @@ def get_train_config(args):
       "class" : "RobustZScoreNorm",
       "kwargs" : {"fields_group": "feature", "clip_outlier": True}
     })
-    learn_processors.append({
-      "class" : "CSRankNorm",
-      "kwargs": {"fields_group": "label"}
-    })
   
   # offical configurations - if specified
-  if "official" in args.name:
+  if "alpha" in args.name:
     infer_processors = [
       {
         "class" : "DropCol", 
@@ -57,11 +53,6 @@ def get_train_config(args):
         "class" : "DropnaProcessor", 
         "kwargs":{"fields_group": "feature"}
       },
-      "DropnaLabel",
-      {
-        "class": "CSZScoreNorm", 
-        "kwargs": {"fields_group": "label"}
-      }
     ]
     data_handler_config = {
       "start_time": "2011-01-01",
@@ -107,7 +98,8 @@ def get_train_config(args):
       "module_path": "qlib.contrib.model.pytorch_nn",
       "kwargs": {
         "input_dim" : input_size,
-        "output_dim" : 1,
+        "output_dim" : 5, # [-10, -5, -1, 1, 5, 10]
+        "loss" : "cls",
         "layers" : hidden_sizes,
         "lr" : 0.002,
         "max_steps" : max_steps,
@@ -117,7 +109,6 @@ def get_train_config(args):
         "lr_decay" : 0.96,
         "lr_decay_steps" : 100,
         "optimizer" : "adam",
-        "loss" : "mse",
         "GPU" : args.gpu_id,
         "seed" : None,
         "weight_decay" : 0.0002
@@ -197,18 +188,31 @@ def simple_backtest(model, dataset, args):
   return res, portfolio_metric_dict, indicator_dict
 
 
+def assign_5label(df):
+  ret = df.values.squeeze()
+  label = np.zeros_like(ret).astype("int64")
+  label[ret > -0.05] = 1
+  label[ret > -0.01] = 2
+  label[ret > 0.01] = 3
+  label[ret > 0.05] = 4
+  return pd.DataFrame({"class": label}, index=df.index)
+
+
 def main(args):
   # model initiaiton
   task = get_train_config(args)
   model = init_instance_by_config(task["model"])
   dataset = init_instance_by_config(task["dataset"])
-  print(task["dataset"])
-  print(model)
 
-  if args.name == "official":
-    model.fit(dataset)
-  else:
-    model.fit_epoch(dataset)
+  df_train, df_valid = dataset.prepare(["train", "valid"],
+    col_set=["feature", "label"],
+    data_key="learn")
+  x_train, y_train = df_train["feature"], df_train["label"]
+  x_valid, y_valid = df_valid["feature"], df_valid["label"]
+  y_train = assign_5label(y_train)
+  y_valid = assign_5label(y_valid)
+
+  model.fit_epoch(x_train, y_train, x_valid, y_valid)
   best_score = model.best_score
 
   res, _, _ = simple_backtest(model, dataset, args)

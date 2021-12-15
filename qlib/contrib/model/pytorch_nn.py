@@ -10,6 +10,7 @@ import copy
 import numpy as np
 import pandas as pd
 from typing import Text, Union
+from pandas.core.frame import DataFrame
 from sklearn.metrics import roc_auc_score, mean_squared_error
 
 import torch
@@ -113,7 +114,7 @@ class DNNModelPytorch(Model):
             np.random.seed(self.seed)
             torch.manual_seed(self.seed)
 
-        self.model = Net(input_dim, output_dim, layers, loss=self.loss_type)
+        self.model = Net(input_dim, output_dim, layers)
         self.logger.info("model:\n{:}".format(self.model))
         self.logger.info("model size: {:.4f} MB".format(count_parameters(self.model)))
 
@@ -146,27 +147,16 @@ class DNNModelPytorch(Model):
         return self.device != torch.device("cpu")
 
     def metric_fn(self, pred, label):
-        mask = torch.isfinite(label)
-        return -self.loss_fn(pred[mask], label[mask])
+        if "mse" in self.loss_type:
+            mask = torch.isfinite(label)
+            return -self.loss_fn(pred[mask], label[mask])
+        elif "cls" in self.loss_type:
+            return (label == pred.argmax(1)).sum() / label.shape[0]
 
     def fit_epoch(
         self,
-        dataset: DatasetH,
-        evals_result=dict(),
-        save_path=None,
+        x_train, y_train, x_valid, y_valid
     ):
-        df_train, df_valid = dataset.prepare(
-            ["train", "valid"],
-            col_set=["feature", "label"],
-            data_key=DataHandlerLP.DK_L,
-        )
-        if df_train.empty or df_valid.empty:
-            raise ValueError("Empty data from dataset, please check your dataset config.")
-
-        x_train, y_train = df_train["feature"], df_train["label"]
-        x_valid, y_valid = df_valid["feature"], df_valid["label"]
-
-        save_path = get_or_create_path(save_path)
         stop_steps = 0
         train_loss = 0
         best_score = -np.inf
@@ -192,11 +182,8 @@ class DNNModelPytorch(Model):
                 if stop_steps >= self.early_stop:
                     self.logger.info("early stop")
                     break
-        
+
         self.best_score = best_score
-        self.logger.info("best score: %.6lf @ %d" % (best_score, best_epoch))
-        self.model.load_state_dict(best_param)
-        torch.save(best_param, save_path)
 
         if self.use_gpu:
             torch.cuda.empty_cache()
@@ -254,6 +241,8 @@ class DNNModelPytorch(Model):
         if "sign" in self.loss_type:
             sign = (label > 0).float() * 2 - 1
             loss = loss + (-(pred * sign)).clamp(min=0).mean()
+        if "cls" in self.loss_type:
+            loss = loss + F.cross_entropy(pred, label)
         return loss
 
     def fit(
@@ -356,7 +345,6 @@ class DNNModelPytorch(Model):
         if self.use_gpu:
             torch.cuda.empty_cache()
 
-
     def get_loss(self, pred, w, target, loss_type):
         if "mse" in loss_type:
             sqr_loss = torch.mul(pred - target, pred - target)
@@ -367,6 +355,28 @@ class DNNModelPytorch(Model):
             return loss(pred, target)
         else:
             raise NotImplementedError("loss {} is not supported!".format(loss_type))
+
+    def predict_dataframe(self, df):
+        index = df.index
+        self.model.eval()
+        x_values = df.values
+        sample_num = x_values.shape[0]
+        preds = []
+        with torch.no_grad():
+            for begin in range(sample_num)[:: self.batch_size]:
+                end = min(sample_num, begin + self.batch_size)
+                x_batch = torch.from_numpy(x_values[begin:end]).float().to(self.device)
+                pred = self.model(x_batch)
+                
+                if "mse" in self.loss_type:
+                    pred = pred.squeeze()
+                else:
+                    prob = F.softmax(pred, 1)
+                    vals, pred_labels = prob.max(1)
+                    pred = vals + pred_labels
+                preds.append(pred.detach().cpu().numpy())
+
+        return pd.Series(np.concatenate(preds), index=index)
 
     def predict(self, dataset: DatasetH, segment: Union[Text, slice] = "test"):
         if not self.fitted:
@@ -382,7 +392,14 @@ class DNNModelPytorch(Model):
             for begin in range(sample_num)[:: self.batch_size]:
                 end = min(sample_num, begin + self.batch_size)
                 x_batch = torch.from_numpy(x_values[begin:end]).float().to(self.device)
-                pred = self.model(x_batch).squeeze()
+                pred = self.model(x_batch)
+                
+                if "mse" in self.loss_type:
+                    pred = pred.squeeze()
+                else:
+                    prob = F.softmax(pred, 1)
+                    vals, pred_labels = prob.max(1)
+                    pred = vals + pred_labels
                 preds.append(pred.detach().cpu().numpy())
 
         return pd.Series(np.concatenate(preds), index=index)
@@ -425,7 +442,7 @@ class AverageMeter:
 
 
 class Net(nn.Module):
-    def __init__(self, input_dim, output_dim, layers=(256, 512, 768, 512, 256, 128, 64), loss="mse"):
+    def __init__(self, input_dim, output_dim, layers=(256, 512, 768, 512, 256, 128, 64)):
         super(Net, self).__init__()
         layers = [input_dim] + list(layers)
         dnn_layers = []
@@ -437,17 +454,8 @@ class Net(nn.Module):
             dnn_layers.append(seq)
         drop_input = nn.Dropout(0.05)
         dnn_layers.append(drop_input)
-        if "mse" in loss:
-            fc = nn.Linear(hidden_units, output_dim)
-            dnn_layers.append(fc)
-
-        elif loss == "binary":
-            fc = nn.Linear(hidden_units, output_dim)
-            sigmoid = nn.Sigmoid()
-            dnn_layers.append(nn.Sequential(fc, sigmoid))
-        else:
-            raise NotImplementedError("loss {} is not supported!".format(loss))
-        # optimizer
+        fc = nn.Linear(hidden_units, output_dim)
+        dnn_layers.append(fc)
         self.dnn_layers = nn.ModuleList(dnn_layers)
         self._weight_init()
 
