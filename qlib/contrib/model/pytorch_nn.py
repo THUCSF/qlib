@@ -5,7 +5,7 @@
 from __future__ import division
 from __future__ import print_function
 
-import os
+import os, math
 import copy
 import numpy as np
 import pandas as pd
@@ -147,20 +147,27 @@ class DNNModelPytorch(Model):
         return self.device != torch.device("cpu")
 
     def metric_fn(self, pred, label):
+        mask = torch.isfinite(label)
+        score = self.pred2score(pred)
+        arr = torch.stack([score[mask], label[mask]])
+        return torch.corrcoef(arr)[0, 1]
+
+    def pred2score(self, pred):
         if "mse" in self.loss_type:
-            mask = torch.isfinite(label)
-            return -self.loss_fn(pred[mask], label[mask])
+            return pred.squeeze()
         elif "cls" in self.loss_type:
-            return (label == pred.argmax(1)).sum() / label.shape[0]
+            prob = F.softmax(pred, 1)
+            vals, pred_labels = prob.max(1)
+            return vals + pred_labels
+        elif "br" in self.loss_type:
+            return pred[:, 0] - torch.sigmoid(pred[:, 1]) # mu - std: 85% chance lower bound
 
     def fit_epoch(
         self,
         x_train, y_train, x_valid, y_valid
     ):
-        stop_steps = 0
-        train_loss = 0
+        stop_steps, train_loss, best_epoch = 0, 0, 0
         best_score = -np.inf
-        best_epoch = 0
 
         # train
         self.logger.info("training...")
@@ -170,7 +177,7 @@ class DNNModelPytorch(Model):
             self.train_epoch(x_train, y_train)
             train_loss, train_score = self.test_epoch(x_train, y_train)
             val_loss, val_score = self.test_epoch(x_valid, y_valid)
-            self.logger.info(f"Epoch {step:03d}: train loss {train_loss:.6f}, valid loss {val_loss:.6f}")
+            self.logger.info(f"Epoch {step:03d}: train loss {train_loss:.6f}, valid loss {val_loss:.6f}; train r: {train_score:.6f}, valid r: {val_score:.6f}")
 
             if val_score > best_score:
                 best_score = val_score
@@ -182,8 +189,11 @@ class DNNModelPytorch(Model):
                 if stop_steps >= self.early_stop:
                     self.logger.info("early stop")
                     break
-
+        
+        self.logger.info(f"Best valid r {best_score:.6f} at {best_epoch:03d}")
         self.best_score = best_score
+        self.best_epoch = best_epoch
+        self.model.load_state_dict(best_param)
 
         if self.use_gpu:
             torch.cuda.empty_cache()
@@ -243,6 +253,12 @@ class DNNModelPytorch(Model):
             loss = loss + (-(pred * sign)).clamp(min=0).mean()
         if "cls" in self.loss_type:
             loss = loss + F.cross_entropy(pred, label)
+        if "br" in self.loss_type: # beyesian regression
+            pred_y, pred_std = pred[:, 0], torch.sigmoid(pred[:, 1])
+            pred_std = pred_std.clamp(min=1e-3)
+            pred_sigma = pred_std ** 2
+            const = math.log(2 * math.pi) / 2
+            loss = (torch.square(pred_y - label) / pred_sigma).mean() / 2 + torch.log(pred_std).mean() + const 
         return loss
 
     def fit(
@@ -361,22 +377,14 @@ class DNNModelPytorch(Model):
         self.model.eval()
         x_values = df.values
         sample_num = x_values.shape[0]
-        preds = []
+        scores = []
         with torch.no_grad():
             for begin in range(sample_num)[:: self.batch_size]:
                 end = min(sample_num, begin + self.batch_size)
                 x_batch = torch.from_numpy(x_values[begin:end]).float().to(self.device)
-                pred = self.model(x_batch)
-                
-                if "mse" in self.loss_type:
-                    pred = pred.squeeze()
-                else:
-                    prob = F.softmax(pred, 1)
-                    vals, pred_labels = prob.max(1)
-                    pred = vals + pred_labels
-                preds.append(pred.detach().cpu().numpy())
-
-        return pd.Series(np.concatenate(preds), index=index)
+                pred = self.pred2score(self.model(x_batch))
+                scores.append(pred.detach().cpu().numpy())
+        return pd.Series(np.concatenate(scores), index=index)
 
     def predict(self, dataset: DatasetH, segment: Union[Text, slice] = "test"):
         if not self.fitted:
@@ -387,22 +395,14 @@ class DNNModelPytorch(Model):
         self.model.eval()
         x_values = x_test.values
         sample_num = x_values.shape[0]
-        preds = []
+        scores = []
         with torch.no_grad():
             for begin in range(sample_num)[:: self.batch_size]:
                 end = min(sample_num, begin + self.batch_size)
                 x_batch = torch.from_numpy(x_values[begin:end]).float().to(self.device)
-                pred = self.model(x_batch)
-                
-                if "mse" in self.loss_type:
-                    pred = pred.squeeze()
-                else:
-                    prob = F.softmax(pred, 1)
-                    vals, pred_labels = prob.max(1)
-                    pred = vals + pred_labels
-                preds.append(pred.detach().cpu().numpy())
-
-        return pd.Series(np.concatenate(preds), index=index)
+                pred = self.pred2score(self.model(x_batch))
+                scores.append(pred.detach().cpu().numpy())
+        return pd.Series(np.concatenate(scores), index=index)
 
     def save(self, filename, **kwargs):
         with save_multiple_parts_file(filename) as model_dir:

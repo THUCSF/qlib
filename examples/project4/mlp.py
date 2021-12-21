@@ -121,8 +121,8 @@ def get_train_config(args):
         "handler": alpha_config,
         "segments": {
           "train": ("2011-01-01", "2014-12-31"),
-          "valid": ("2015-01-01", "2016-12-31"),
-          "test": ("2017-01-01", "2020-08-01"),
+          "valid": ("2015-01-01", "2015-12-31"),
+          "test": ("2016-01-01", "2016-12-31"),
         },
       },
     },
@@ -230,11 +230,15 @@ def main(args):
 
 if __name__ == "__main__":
   parser = argparse.ArgumentParser()
+  # training options
   parser.add_argument("--gpu-id", default=0, type=int)
+  parser.add_argument("--market", default="csi300", type=str)
+  # architecture options
   parser.add_argument("--n-layer", default=1, type=int)
   parser.add_argument("--win-size", default=1, type=int)
+  # repeat
   parser.add_argument("--repeat-ind", default=0, type=int)
-  parser.add_argument("--market", default="csi300", type=str)
+  # evaluation
   parser.add_argument("--benchmark", default="SH000300", type=str)
   parser.add_argument("--name", default="raw", type=str,
     help="raw | zscorenorm")

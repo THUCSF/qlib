@@ -108,22 +108,22 @@ def experiment(expr_dir, dataset_config, models, model_cfgs, res_dic, args):
     y = train_df.values[:, -1]
     pred = predict_dataframe(model, train_df, device)
     mask = (y >= -0.1) & (y <= 0.1)
-    plot_scatter_ci(ax, y[mask], pred[mask])
-    ax.set_title(f"Train Return v.s. Pred")
+    plot_scatter_ci(ax, pred[mask], y[mask])
+    ax.set_title(f"Train Pred v.s. Return")
 
     y = val_df.values[:, -1]
     pred = predict_dataframe(model, val_df, device)
     mask = (y >= -0.1) & (y <= 0.1)
     ax = plt.subplot(1, 3, 2)
-    plot_scatter_ci(ax, y[mask], pred[mask])
-    ax.set_title(f"Valid Return v.s. Pred")
+    plot_scatter_ci(ax, pred[mask], y[mask])
+    ax.set_title(f"Valid Pred v.s. Return")
 
     y = test_df.values[:, -1]
     pred = predict_dataframe(model, test_df, device)
     mask = (y >= -0.1) & (y <= 0.1)
     ax = plt.subplot(1, 3, 3)
-    plot_scatter_ci(ax, y[mask], pred[mask])
-    ax.set_title(f"Test Return v.s. Pred")
+    plot_scatter_ci(ax, pred[mask], y[mask])
+    ax.set_title(f"Test Pred v.s. Return")
     plt.tight_layout()
     plt.savefig(f"{expr_dir}/r{i}_scatter_{args.plot_ds}.png")
     plt.close()

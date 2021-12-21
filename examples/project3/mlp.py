@@ -1,13 +1,9 @@
 """Test MLP layers and window size
 """
 import sys
-
-from numpy.core.fromnumeric import argsort
 sys.path.insert(0, "../..")
 
 import qlib, torch, os, argparse
-import numpy as np
-import pandas as pd
 from qlib.config import REG_CN
 from qlib.utils import init_instance_by_config
 from qlib.contrib.evaluate import risk_analysis
@@ -190,9 +186,6 @@ def simple_backtest(model, dataset, args):
       report_normal["return"] - report_normal["bench"], freq=_freq)
     res["excess_return_with_cost"] = risk_analysis(
       report_normal["return"] - report_normal["bench"] - report_normal["cost"], freq=_freq)
-
-  keys = ['mean', 'std', 'annualized_return', 'max_drawdown']
-  items = ['excess_return_with_cost', 'excess_return_without_cost']
 
   return res, portfolio_metric_dict, indicator_dict
 

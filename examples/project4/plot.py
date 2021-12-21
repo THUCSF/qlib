@@ -28,6 +28,13 @@ def get_data(df, N=5):
 
 
 def plot_scatter_ci(ax, x, y, div_num=20):
+  """Plot the conditional mean and confidence interval of scatter plot.
+  Args:
+    ax: the figure ax.
+    x: (N,) the x-axis of points.
+    y: (N,) the y-axis of points.
+    div_num: number of bins to compute mean
+  """
   ind = x.argsort()
   xmean = x.mean()
   sx, sy = x[ind], y[ind]
@@ -66,17 +73,6 @@ def plot_scatter_ci(ax, x, y, div_num=20):
     ax.set_ylim([mean - 3 * sigma, mean + 3 * sigma])
   except:
     pass
-  #ax2 = ax.twinx()
-  #ax2.plot(xs, counts, 'g-.', linewidth=1)
-
-  #ax1_ylims = ax.axes.get_ylim()
-  #ax1_yratio = ax1_ylims[0] / ax1_ylims[1] 
-  #ax2_ylims = ax2.axes.get_ylim() 
-  #ax2_yratio = ax2_ylims[0] / ax2_ylims[1] 
-  #if ax1_yratio < ax2_yratio: 
-  #  ax2.set_ylim(bottom=ax2_ylims[1] * ax1_yratio)
-  #else:
-  #  ax.set_ylim(bottom=ax1_ylims[1] * ax2_yratio)
 
 
 def assign_5label(df):
@@ -110,22 +106,22 @@ def experiment(expr_dir, dataset_config, models, model_cfgs, res_dic, args):
     y = y_train.values.squeeze()
     pred = model.predict_dataframe(x_train)
     mask = (y >= -0.1) & (y <= 0.1)
-    plot_scatter_ci(ax, y[mask], pred[mask])
-    ax.set_title(f"Train Return v.s. Pred")
+    plot_scatter_ci(ax, pred[mask], y[mask])
+    ax.set_title(f"Train Pred v.s. Return")
 
     y = y_valid.values.squeeze()
     pred = model.predict_dataframe(x_valid)
     mask = (y >= -0.1) & (y <= 0.1)
     ax = plt.subplot(1, 3, 2)
-    plot_scatter_ci(ax, y[mask], pred[mask])
-    ax.set_title(f"Valid Return v.s. Pred")
+    plot_scatter_ci(ax, pred[mask], y[mask])
+    ax.set_title(f"Valid Pred v.s. Return")
 
     y = y_test.values.squeeze()
     pred = model.predict_dataframe(x_test)
     mask = (y >= -0.1) & (y <= 0.1)
     ax = plt.subplot(1, 3, 3)
-    plot_scatter_ci(ax, y[mask], pred[mask])
-    ax.set_title(f"Test Return v.s. Pred")
+    plot_scatter_ci(ax, pred[mask], y[mask])
+    ax.set_title(f"Test Pred v.s. Return")
     plt.tight_layout()
     plt.savefig(f"{expr_dir}/r{i}_scatter_{args.plot_ds}.png")
     plt.close()
