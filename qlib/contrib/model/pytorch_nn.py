@@ -27,24 +27,6 @@ from ...log import get_module_logger
 
 
 class DNNModelPytorch(Model):
-    """DNN Model
-
-    Parameters
-    ----------
-    input_dim : int
-        input dimension
-    output_dim : int
-        output dimension
-    layers : tuple
-        layer sizes
-    lr : float
-        learning rate
-    optimizer : str
-        optimizer name
-    GPU : int
-        the GPU ID used for training
-    """
-
     def __init__(
         self,
         input_dim=360,
@@ -58,7 +40,6 @@ class DNNModelPytorch(Model):
         optimizer="adam",
         loss="mse-sign",
         GPU=0,
-        seed=None,
         weight_decay=0.0,
         **kwargs
     ):
@@ -76,51 +57,13 @@ class DNNModelPytorch(Model):
         self.optimizer = optimizer.lower()
         self.loss_type = loss
         self.device = torch.device("cuda:%d" % (GPU) if torch.cuda.is_available() and GPU >= 0 else "cpu")
-        self.seed = seed
         self.weight_decay = weight_decay
 
-        self.logger.info(
-            "DNN parameters setting:"
-            "\nlayers : {}"
-            "\nlr : {}"
-            "\nmax_steps : {}"
-            "\nbatch_size : {}"
-            "\nearly_stop : {}"
-            "\neval_steps : {}"
-            "\noptimizer : {}"
-            "\nloss_type : {}"
-            "\neval_steps : {}"
-            "\nseed : {}"
-            "\ndevice : {}"
-            "\nuse_GPU : {}"
-            "\nweight_decay : {}".format(
-                layers,
-                lr,
-                max_steps,
-                batch_size,
-                early_stop,
-                eval_steps,
-                optimizer,
-                loss,
-                eval_steps,
-                seed,
-                self.device,
-                self.use_gpu,
-                weight_decay,
-            )
-        )
-
-        if self.seed is not None:
-            np.random.seed(self.seed)
-            torch.manual_seed(self.seed)
-
         self.model = Net(input_dim, output_dim, layers)
-        self.logger.info("model:\n{:}".format(self.model))
-        self.logger.info("model size: {:.4f} MB".format(count_parameters(self.model)))
 
         if optimizer.lower() == "adam":
             self.train_optimizer = optim.Adam(self.model.parameters(), lr=self.lr, weight_decay=self.weight_decay)
-        elif optimizer.lower() == "gd":
+        elif optimizer.lower() == "sgd":
             self.train_optimizer = optim.SGD(self.model.parameters(), lr=self.lr, weight_decay=self.weight_decay)
         else:
             raise NotImplementedError("optimizer {} is not supported!".format(optimizer))

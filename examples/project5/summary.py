@@ -1,15 +1,11 @@
-"""Test MLP layers and window size
+"""Summarize the results of MLPs into latex tables.
 """
 import sys
 sys.path.insert(0, "../..")
 
-import torch, argparse, glob
+import torch, argparse, glob, json
 import numpy as np
 import pandas as pd
-import matplotlib
-import matplotlib.pyplot as plt
-matplotlib.style.use('seaborn-poster')
-matplotlib.style.use('ggplot')
 
 
 def str_table_single_std(dic, output_std=True):
@@ -104,35 +100,41 @@ def set_dic(dic, key1, key2, val):
 
 if __name__ == "__main__":
   parser = argparse.ArgumentParser()
-  parser.add_argument("--gpu-id", default=0, type=int)
-  parser.add_argument("--name", default="raw", type=str,
-    help="raw | zscorenorm")
-  parser.add_argument("--ds", default="china_stock_qlib_adj",
-    help="qlib_cn_stock | china_stock_qlib_adj")
   parser.add_argument("--benchmark", default="SH000300", type=str)
-  parser.add_argument("--market", default="csi300", type=str)
   args = parser.parse_args()
 
-  expr_dir = f"expr/{args.name}/{args.ds}/{args.market}"
-
-  model_dirs = glob.glob(f"{expr_dir}/*")
-  model_dirs.sort()
-  res_dic = {}
-  for model_dir in model_dirs:
-    expr_names = glob.glob(f"{model_dir}/*.pth")
-    expr_names.sort()
-    if len(expr_names) == 0:
-      continue
-    models, model_cfgs = [], []
-    for expr_name in expr_names:
-      expr_res = torch.load(expr_name, map_location="cpu")
-      expr_res["model_config"]["kwargs"]["GPU"] = args.gpu_id
-      cfgs = expr_name.split("/")[-2]
-      cfgs = cfgs[cfgs.rfind("/")+1:].strip().split("_")
-      cfgs = [c[1:] for c in cfgs]
-      set_dic(res_dic, cfgs[0], cfgs[1],
-        expr_res["eval_result"]["return"])
-  print(res_dic)
-  std_dic = dic_mean_std(res_dic)
-  with open(f"{expr_dir}/res.tex", "w") as f:
-    f.write(str_latex_table(str_table_single_std(std_dic)))
+  label_type = "pc-1"
+  for market in ["csi300", "main"]:
+    for data_type in ["raw", "zscorenorm"]:
+      for market in ["csi300", "main"]:
+        expr_dir = f"expr/{market}_{data_type}_{label_type}"
+        model_dirs = glob.glob(f"{expr_dir}/*")
+        model_dirs.sort()
+        model_dirs = [m for m in model_dirs if "." not in m]
+        res_dic = {}
+        for model_dir in model_dirs:
+          model_name = model_dir[model_dir.rfind("/")+1:]
+          loss_type, layer, window = model_name.split("_") # e.g. br_l1_w32
+          if loss_type not in res_dic:
+            res_dic[loss_type] = {}
+          layer = layer[1:]
+          window = window[1:]
+          model_repeat_dirs = glob.glob(f"{model_dir}/*")
+          model_repeat_dirs.sort()
+          for mrd in model_repeat_dirs:
+            mr_name = mrd[mrd.rfind("/")+1:]
+            repeat_ind, train_year = mr_name.split("_")
+            repeat_ind = repeat_ind[1:]
+            train_year = train_year[1:]
+            try:
+              with open(f"{mrd}/result.json", "r") as f:
+                res = json.load(f)
+            except:
+              pass
+            set_dic(res_dic[loss_type], layer, window, res["ER"])
+        
+        for data_type in res_dic:
+          std_dic = dic_mean_std(res_dic[data_type])
+          print(std_dic)
+          with open(f"{expr_dir}/{data_type}.tex", "w") as f:
+            f.write(str_latex_table(str_table_single_std(std_dic)))

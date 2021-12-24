@@ -379,8 +379,8 @@ def REF(x, d):
     return f"Ref(${x}, {d})" if d != 0 else "$" + x
 
 
-class CustomAlpha(Alpha158):
-    """Select custom alphas here.
+class RawPriceChange(Alpha158):
+    """Raw price change in percentage with a time window.
     """
     def __init__(
         self,
@@ -400,16 +400,6 @@ class CustomAlpha(Alpha158):
         super().__init__(instruments, start_time, end_time, freq, infer_processors, learn_processors, fit_start_time, fit_end_time, process_type, filter_pipe, inst_processor, **kwargs)
 
     def get_feature_config(self):
-        """
-            "price": {
-                "windows": list(range(self.window)),
-                "feature": ["OPEN", "HIGH", "LOW", "CLOSE"],
-            },
-            "volume": {
-                "windows": list(range(self.window)),
-            }
-        """
-
         conf = {
             "diffprice": {
                 "windows": list(range(self.window)),
@@ -486,8 +476,9 @@ class CustomAlpha(Alpha158):
                 fields += [f"{REF(field, d)}/{REF('close', d + 1)} - 1" for d in windows]
                 names += [f"DIFF{field.upper()}{d}" for d in windows]
         if "ema_vol_diff" in config:
+            ema_length = max(len(windows), 5)
             windows = config["ema_vol_diff"].get("windows", range(10))
-            fields += [f"{REF('volume', d)}/EMA($volume, {len(windows)}) - 1" for d in windows]
+            fields += [f"{REF('volume', d)}/EMA($volume, {ema_length}) - 1" for d in windows]
             names += ["EVD" + str(d) for d in windows]
         if "volume" in config:
             windows = config["volume"].get("windows", range(10))
