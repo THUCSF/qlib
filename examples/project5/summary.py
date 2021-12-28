@@ -106,35 +106,36 @@ if __name__ == "__main__":
   label_type = "pc-1"
   for market in ["csi300", "main"]:
     for data_type in ["raw", "zscorenorm"]:
-      for market in ["csi300", "main"]:
-        expr_dir = f"expr/{market}_{data_type}_{label_type}"
-        model_dirs = glob.glob(f"{expr_dir}/*")
-        model_dirs.sort()
-        model_dirs = [m for m in model_dirs if "." not in m]
-        res_dic = {}
-        for model_dir in model_dirs:
-          model_name = model_dir[model_dir.rfind("/")+1:]
-          loss_type, layer, window = model_name.split("_") # e.g. br_l1_w32
-          if loss_type not in res_dic:
-            res_dic[loss_type] = {}
-          layer = layer[1:]
-          window = window[1:]
-          model_repeat_dirs = glob.glob(f"{model_dir}/*")
-          model_repeat_dirs.sort()
-          for mrd in model_repeat_dirs:
-            mr_name = mrd[mrd.rfind("/")+1:]
-            repeat_ind, train_year = mr_name.split("_")
-            repeat_ind = repeat_ind[1:]
-            train_year = train_year[1:]
-            try:
-              with open(f"{mrd}/result.json", "r") as f:
-                res = json.load(f)
-            except:
-              pass
-            set_dic(res_dic[loss_type], layer, window, res["ER"])
-        
-        for data_type in res_dic:
-          std_dic = dic_mean_std(res_dic[data_type])
-          print(std_dic)
-          with open(f"{expr_dir}/{data_type}.tex", "w") as f:
+      expr_dir = f"expr/{market}_{data_type}_{label_type}"
+      model_dirs = glob.glob(f"{expr_dir}/*")
+      model_dirs.sort()
+      model_dirs = [m for m in model_dirs if "." not in m]
+      res_dic = {}
+      for model_dir in model_dirs:
+        model_name = model_dir[model_dir.rfind("/")+1:]
+        loss_type, layer, window = model_name.split("_") # e.g. br_l1_w32
+        if loss_type not in res_dic:
+          res_dic[loss_type] = {}
+        layer = layer[1:]
+        window = window[1:]
+        model_repeat_dirs = glob.glob(f"{model_dir}/*")
+        model_repeat_dirs.sort()
+        for mrd in model_repeat_dirs:
+          mr_name = mrd[mrd.rfind("/")+1:]
+          repeat_ind, data_range = mr_name.split("_")
+          repeat_ind = repeat_ind[1:]
+          data_range = data_range[1:]
+          if data_range not in res_dic[loss_type]:
+            res_dic[loss_type][data_range] = {}
+          try:
+            with open(f"{mrd}/result.json", "r") as f:
+              res = json.load(f)
+          except:
+            pass
+          set_dic(res_dic[loss_type][data_range], layer, window, res["ER"])
+      
+      for data_type in res_dic:
+        for data_range in res_dic[data_type]:
+          std_dic = dic_mean_std(res_dic[data_type][data_range])
+          with open(f"{expr_dir}/{data_type}_{data_range}.tex", "w") as f:
             f.write(str_latex_table(str_table_single_std(std_dic)))

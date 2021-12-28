@@ -58,6 +58,10 @@ class Learner(pl.LightningModule):
     x, y = batch
     pred = self.model(x)
     loss = self.loss_fn(pred, y)
+    for param_group in self.optim.param_groups:
+      self.log("lr", float(param_group['lr']))
+      break
+
     return {"loss" : loss, "y": y, "pred": pred}
 
   def pred2score(self, pred):
@@ -117,10 +121,10 @@ class Learner(pl.LightningModule):
     return pd.Series(np.concatenate(scores), index=index)
 
   def configure_optimizers(self):
-    optim = torch.optim.Adam(self.model.parameters(),
+    self.optim = torch.optim.Adam(self.model.parameters(),
       lr=self.lr, weight_decay=self.weight_decay)
-    sched = torch.optim.lr_scheduler.ReduceLROnPlateau(optim)
-    return {"optimizer": optim, "lr_scheduler": sched, "monitor": "val_R"}
+    self.sched = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optim)
+    return {"optimizer": self.optim, "lr_scheduler": self.sched, "monitor": "val_R"}
 
   def _calc_R(self, pred, y, is_logging=True):
     score = self.pred2score(pred)

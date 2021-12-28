@@ -11,7 +11,7 @@ matplotlib.style.use('ggplot')
 from torch.utils.data import DataLoader, TensorDataset
 import pytorch_lightning as pl
 import pytorch_lightning.loggers as pl_logger
-from pytorch_lightning.callbacks import LearningRateMonitor, ModelCheckpoint
+from pytorch_lightning.callbacks import LearningRateMonitor, ModelCheckpoint, EarlyStopping
 from qlib.config import REG_CN
 from qlib.utils import init_instance_by_config
 from lib import *
@@ -19,6 +19,9 @@ from lib import *
 
 def main(args, model_dir):
   model_name = f"r{args.repeat_ind}_y{args.train_start}-y{args.test_end}"
+  if os.path.exists(f"{model_dir}/{model_name}/model.pth"):
+    print(f"=> {model_dir}/{model_name}/model.pth exists, skipped.")
+    return
   args.label_expr = fetch_label(args.label_type)
   task = get_train_config(args)
   model = init_instance_by_config(task["model"]).cuda()
@@ -46,17 +49,17 @@ def main(args, model_dir):
   val_dl = DataLoader(TensorDataset(x_valid, y_valid),
     batch_size=4096, shuffle=False, num_workers=1)
 
-  lr_monitor = LearningRateMonitor("step")
   mc = ModelCheckpoint(mode="max",
     save_weights_only=True,
     dirpath=f"{model_dir}/{model_name}",
     filename="{epoch}-{val_R:.6f}", monitor="val_R")
+  es = EarlyStopping("lr", stopping_threshold=5e-6)
   logger = pl_logger.TensorBoardLogger(f"{model_dir}/{model_name}")
   trainer = pl.Trainer(
     logger=logger,
     max_epochs=args.n_epoch,
     progress_bar_refresh_rate=1,
-    callbacks=[lr_monitor, mc],
+    callbacks=[mc, es],
     gpus=1,
     distributed_backend='dp')
   trainer.fit(learner, train_dl, val_dl)
