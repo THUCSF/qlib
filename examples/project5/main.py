@@ -81,8 +81,8 @@ def main(args, model_dir):
   x_valid = torch.from_numpy(x_valid.values).float()
   y_valid = torch.from_numpy(y_valid.values).float()
   if args.loss_type == "cls":
-    y_train_orig = y_train.detach().clone()
-    y_train = assign_5label(y_train)
+    y_train = torch.cat([y_train, assign_5label(y_train)], 1)
+    y_valid = torch.cat([y_valid, assign_5label(y_valid)], 1)
   del df_train, df_valid
 
   train_dl = DataLoader(TensorDataset(x_train, y_train),
@@ -119,7 +119,7 @@ def main(args, model_dir):
     batch_size=4096, shuffle=False, num_workers=1)
 
   x_dls = [train_dl, val_dl, test_dl]
-  ys = [y_train_orig if args.loss_type == "cls" else y_train,
+  ys = [y_train[:, 0] if args.loss_type == "cls" else y_train,
     y_valid, y_test]
   if "br" in args.loss_type:
     plot_br(x_dls, ys, trainer, learner, model_dir, model_name,

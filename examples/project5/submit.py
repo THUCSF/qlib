@@ -20,10 +20,10 @@ def train_mlp():
   cmds = []
   cmd = "python main.py --data-type {data_type} --market {market} --repeat-ind {repeat_ind} --loss-type {loss_type} --n-layer {n_layer} --win-size {win_size}  --train-end {train_end} --valid-start {valid_start} --valid-end {valid_end} --test-start {test_start} --test-end {test_end}"
 
-  for repeat_ind in range(5):
-    for train_end in range(2013, 2019):
-      valid_start = valid_end = train_end + 1
-      test_start = test_end = valid_end + 1
+  for repeat_ind in range(5): # 1500 models to be trained
+    for train_end in range(2012, 2017):
+      valid_start = valid_end = train_end + 2
+      test_start = test_end = valid_end + 2
       for data_type in ["raw"]:
         for market in ["csi300", "main"]:
           for loss_type in ["rgr", "cls"]:

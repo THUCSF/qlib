@@ -78,7 +78,7 @@ class Learner(pl.LightningModule):
     if "rgr" in self.loss_type:
       loss = loss + torch.square(pred - label).mean()
     elif "cls" in self.loss_type:
-      loss = loss + F.cross_entropy(pred, label.squeeze())
+      loss = loss + F.cross_entropy(pred, label[:, 1].long())
     elif "br" in self.loss_type: # beyesian regression
       pred_y, pred_std = pred[:, 0], torch.sigmoid(pred[:, 1])
       pred_std = pred_std.clamp(min=1e-3)
@@ -129,8 +129,13 @@ class Learner(pl.LightningModule):
     score = self.pred2score(pred)
     pmin, pmax = score.min(), score.max()
     psmin = pmax - (pmax - pmin) * 0.1
-    mask = torch.isfinite(y) & (score > psmin)
-    hrr = y[mask].mean() * 100 # shown in percentage
+    if "cls" in self.loss_type:
+      ret = y[:, 0]
+      mask = torch.isfinite(ret) & (score > psmin)
+      hrr = ret[mask].mean() * 100 # shown in percentage
+    else:
+      mask = torch.isfinite(y) & (score > psmin)
+      hrr = y[mask].mean() * 100 # shown in percentage
     return hrr
   
   def _calc_acc(self, pred, y):
