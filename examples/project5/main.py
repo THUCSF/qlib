@@ -17,6 +17,47 @@ from qlib.utils import init_instance_by_config
 from lib import *
 
 
+def plot_br(x_dls, ys, trainer, learner, model_dir, model_name, subfix=""):
+  points = []
+  xnames = ["mu", "sigma", "score"] # i
+  names = ["Train", "Valid", "Test"] # j
+
+  for i in range(len(x_dls)):
+    out = torch.cat(trainer.predict(learner, x_dls[i]))
+    mu = torch2numpy(out[:, 0])
+    sigma = torch2numpy(torch.sigmoid(out[:, 1]))
+    score = torch2numpy(learner.pred2score(out))
+    points.append((mu, sigma, score))
+
+  for i in range(3):
+    plt.figure(figsize=(30, 7))
+    for j in range(3):
+      ax = plt.subplot(1, 3, j + 1)
+      plot_scatter_ci(ax, points[j][i], ys[j].squeeze())
+      ax.set_title(f"{names[j]} Pred ({xnames[i]}) v.s. Return")
+    plt.tight_layout()
+    plt.savefig(f"{model_dir}/{model_name}/pvr_{xnames[i]}_{subfix}.png")
+    plt.close()
+
+
+def plot_normal(x_dls, ys, trainer, learner, model_dir, model_name, subfix=""):
+  points = []
+  for i in range(3):
+    out = torch.cat(trainer.predict(learner, x_dls))
+    score = learner.pred2score(out)
+    points.append(torch2numpy(score))
+
+  names = ["Train", "Valid", "Test"] # j
+  plt.figure(figsize=(30, 7))
+  for i in range(3):
+    ax = plt.subplot(1, 3, i + 1)
+    plot_scatter_ci(ax, points[i], ys[i].squeeze())
+    ax.set_title(f"{names[i]} Pred v.s. Return")
+  plt.tight_layout()
+  plt.savefig(f"{model_dir}/{model_name}/pvr_{subfix}.png")
+  plt.close()
+
+
 def main(args, model_dir):
   model_name = f"r{args.repeat_ind}_y{args.train_start}-y{args.test_end}"
   if os.path.exists(f"{model_dir}/{model_name}/model.pth"):
@@ -49,11 +90,11 @@ def main(args, model_dir):
   val_dl = DataLoader(TensorDataset(x_valid, y_valid),
     batch_size=4096, shuffle=False, num_workers=1)
 
-  mc = ModelCheckpoint(mode="max",
-    save_weights_only=True,
+  mc = ModelCheckpoint(save_weights_only=True,
     dirpath=f"{model_dir}/{model_name}",
-    filename="{epoch}-{val_R:.6f}", monitor="val_R")
-  es = EarlyStopping("lr", stopping_threshold=5e-6)
+    filename="{epoch}-{val_metric:.2f}",
+    monitor="val_metric", mode="max")
+  es = EarlyStopping("lr", patience=1e3, stopping_threshold=5e-6)
   logger = pl_logger.TensorBoardLogger(f"{model_dir}/{model_name}")
   trainer = pl.Trainer(
     logger=logger,
@@ -63,9 +104,8 @@ def main(args, model_dir):
     gpus=1,
     distributed_backend='dp')
   trainer.fit(learner, train_dl, val_dl)
-  best_model = glob.glob(f"{model_dir}/{model_name}/*.ckpt")[0]
-  learner.load_state_dict(torch.load(best_model)["state_dict"])
-  res, _, _ = simple_backtest(learner, dataset, args)
+
+  final_res, _, _ = simple_backtest(learner, dataset, args)
 
   df_test = dataset.prepare(["test"], col_set=["feature", "label"],
     data_key="infer")[0]
@@ -78,50 +118,35 @@ def main(args, model_dir):
   train_dl = DataLoader(TensorDataset(x_train, y_train),
     batch_size=4096, shuffle=False, num_workers=1)
 
-  points = []
   x_dls = [train_dl, val_dl, test_dl]
-  if args.loss_type == "br":
-    for i in range(len(x_dls)):
-      out = torch.cat(trainer.predict(learner, x_dls[i]))
-      mu = torch2numpy(out[:, 0])
-      sigma = torch2numpy(torch.sigmoid(out[:, 1]))
-      score = torch2numpy(learner.pred2score(out))
-      points.append((mu, sigma, score))
-
-    xnames = ["mu", "sigma", "score"] # i
-    names = ["Train", "Valid", "Test"] # j
-    ys = [y_train_orig if args.loss_type == "cls" else y_train,
-      y_valid, y_test] # j
-    for i in range(3):
-      plt.figure(figsize=(30, 7))
-      for j in range(3):
-        ax = plt.subplot(1, 3, j + 1)
-        plot_scatter_ci(ax, points[j][i], ys[j].squeeze())
-        ax.set_title(f"{names[j]} Pred ({xnames[i]}) v.s. Return")
-      plt.tight_layout()
-      plt.savefig(f"{model_dir}/{model_name}/pvr_{xnames[i]}.png")
-      plt.close()
+  ys = [y_train_orig if args.loss_type == "cls" else y_train,
+    y_valid, y_test]
+  if "br" in args.loss_type:
+    plot_br(x_dls, ys, trainer, learner, model_dir, model_name,
+      subfix="final")
   else:
-    for i in range(3):
-      out = torch.cat(trainer.predict(learner, test_dl))
-      score = learner.pred2score(out)
-      points.append(torch2numpy(score))
+    plot_normal(test_dl, ys, trainer, learner, model_dir, model_name,
+      subfix="final")
 
-    names = ["Train", "Valid", "Test"] # j
-    ys = [y_train_orig if args.loss_type == "cls" else y_train,
-      y_valid, y_test] # j
-    plt.figure(figsize=(30, 7))
-    for i in range(3):
-      ax = plt.subplot(1, 3, i + 1)
-      plot_scatter_ci(ax, points[i], ys[i].squeeze())
-      ax.set_title(f"{names[i]} Pred v.s. Return")
-    plt.tight_layout()
-    plt.savefig(f"{model_dir}/{model_name}/pvr.png")
-    plt.close()
+  best_model = glob.glob(f"{model_dir}/{model_name}/*.ckpt")[0]
+  learner.load_state_dict(torch.load(best_model)["state_dict"])
+  best_res, _, _ = simple_backtest(learner, dataset, args)
+
+  if "br" in args.loss_type:
+    plot_br(x_dls, ys, trainer, learner, model_dir, model_name,
+      subfix="best")
+  else:
+    plot_normal(test_dl, ys, trainer, learner, model_dir, model_name,
+      subfix="best")
 
   eval_result = {
-    "ER" : float(res['excess_return_without_cost'].risk['annualized_return']),
-    "ERC" : float(res['excess_return_with_cost'].risk['annualized_return'])}
+    "final" : {
+      "ER" : float(final_res['excess_return_without_cost'].risk['annualized_return']),
+      "ERC" : float(final_res['excess_return_with_cost'].risk['annualized_return'])
+    }, "best" : {
+      "ER" : float(best_res['excess_return_without_cost'].risk['annualized_return']),
+      "ERC" : float(best_res['excess_return_with_cost'].risk['annualized_return'])
+    }}
   config = {
     "learner_config" : task["learner"],
     "model_config" : task["model"],
@@ -132,8 +157,6 @@ def main(args, model_dir):
     json.dump(eval_result, f)
   torch.save(learner.model.state_dict(),
     f"{model_dir}/{model_name}/model.pth") # this is the latest model
-
-  return res
 
 
 def fetch_label(label_type):
@@ -184,4 +207,4 @@ if __name__ == "__main__":
   if not os.path.exists(model_dir):
     os.makedirs(model_dir)
   
-  res = main(args, model_dir)
+  main(args, model_dir)

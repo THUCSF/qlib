@@ -20,17 +20,15 @@ def train_mlp():
   cmds = []
   cmd = "python main.py --data-type {data_type} --market {market} --repeat-ind {repeat_ind} --loss-type {loss_type} --n-layer {n_layer} --win-size {win_size}  --train-end {train_end} --valid-start {valid_start} --valid-end {valid_end} --test-start {test_start} --test-end {test_end}"
 
-  # raw and zscorenorm
-  for train_end in range(2014, 2018):
-    valid_start = valid_end = train_end + 1
-    test_start = test_end = valid_end + 1
-
-    for data_type in ["raw", "zscorenorm"]:
-      for market in ["csi300", "main"]:
-        for loss_type in ["rgr", "br", "cls"]:
-          for win_size in [1, 4, 8, 16, 32]:
-            for n_layer in [1, 4, 8]:
-              for repeat_ind in range(5):
+  for repeat_ind in range(5):
+    for train_end in range(2013, 2019):
+      valid_start = valid_end = train_end + 1
+      test_start = test_end = valid_end + 1
+      for data_type in ["raw"]:
+        for market in ["csi300", "main"]:
+          for loss_type in ["rgr", "cls"]:
+            for win_size in [1, 4, 8, 16, 32]:
+              for n_layer in [1, 4, 8]:
                 cmds.append(cmd.format(repeat_ind=repeat_ind,
                   data_type=data_type, market=market, loss_type=loss_type,
                   n_layer=n_layer, win_size=win_size,

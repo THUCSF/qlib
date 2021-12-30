@@ -3,6 +3,7 @@
 import sys
 sys.path.insert(0, "../..")
 
+import pprint
 import torch, argparse, glob, json
 import numpy as np
 import pandas as pd
@@ -105,7 +106,7 @@ if __name__ == "__main__":
 
   label_type = "pc-1"
   for market in ["csi300", "main"]:
-    for data_type in ["raw", "zscorenorm"]:
+    for data_type in ["raw"]:
       expr_dir = f"expr/{market}_{data_type}_{label_type}"
       model_dirs = glob.glob(f"{expr_dir}/*")
       model_dirs.sort()
@@ -134,8 +135,10 @@ if __name__ == "__main__":
             pass
           set_dic(res_dic[loss_type][data_range], layer, window, res["ER"])
       
-      for data_type in res_dic:
-        for data_range in res_dic[data_type]:
-          std_dic = dic_mean_std(res_dic[data_type][data_range])
-          with open(f"{expr_dir}/{data_type}_{data_range}.tex", "w") as f:
+      for loss_type in res_dic:
+        for data_range in res_dic[loss_type]:
+          std_dic = dic_mean_std(res_dic[loss_type][data_range])
+          print(market, data_type, loss_type, data_range)
+          pprint.pprint(std_dic)
+          with open(f"{expr_dir}/{loss_type}_{data_range}.tex", "w") as f:
             f.write(str_latex_table(str_table_single_std(std_dic)))

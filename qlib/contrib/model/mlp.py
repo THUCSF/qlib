@@ -61,7 +61,6 @@ class Learner(pl.LightningModule):
     for param_group in self.optim.param_groups:
       self.log("lr", float(param_group['lr']))
       break
-
     return {"loss" : loss, "y": y, "pred": pred}
 
   def pred2score(self, pred):
@@ -121,37 +120,31 @@ class Learner(pl.LightningModule):
     return pd.Series(np.concatenate(scores), index=index)
 
   def configure_optimizers(self):
-    self.optim = torch.optim.Adam(self.model.parameters(),
+    self.optim = torch.optim.AdamW(self.model.parameters(),
       lr=self.lr, weight_decay=self.weight_decay)
-    self.sched = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optim)
-    return {"optimizer": self.optim, "lr_scheduler": self.sched, "monitor": "val_R"}
+    self.sched = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optim, mode="max")
+    return {"optimizer": self.optim, "lr_scheduler": self.sched, "monitor": "val_metric"}
 
-  def _calc_R(self, pred, y, is_logging=True):
+  def _calc_high_rank_return(self, pred, y):
     score = self.pred2score(pred)
-    mask = torch.isfinite(y)
-    pr = torch.corrcoef(torch.stack([score[mask], y[mask]]))
-    pr = pr[0, 1]
-    if is_logging:
-      self.log(f"val_R", pr)
-    return pr
+    pmin, pmax = score.min(), score.max()
+    psmin = pmax - (pmax - pmin) * 0.1
+    mask = torch.isfinite(y) & (score > psmin)
+    hrr = y[mask].mean() * 100 # shown in percentage
+    return hrr
   
-  def _calc_acc(self, pred, y, is_logging=True):
+  def _calc_acc(self, pred, y):
     tp = (pred.argmax(1) == y).sum()
     acc = tp / y.shape[0]
-    if is_logging:
-      self.log("val_R", acc)
     return acc
 
-  def _calc_metric(self, outs, is_logging=True):
+  def _calc_metric(self, outs):
     pred, y = collate_step_outputs(outs)
-    if self.loss_type in ["rgr", "br"]:
-      return self._calc_R(pred, y, is_logging)
-    elif self.loss_type == "cls":
-      return self._calc_acc(pred, y, is_logging)
+    return self._calc_high_rank_return(pred, y)
 
   def training_epoch_end(self, outs):
-    res = self._calc_metric(outs, is_logging=False)
-    self.log("train_R", res)
+    res = self._calc_metric(outs)
+    self.log("train_metric", res)
 
   def training_step_end(self, outs):
     self.log("train_loss", outs["loss"])
@@ -166,7 +159,9 @@ class Learner(pl.LightningModule):
     return outs
 
   def validation_epoch_end(self, outs):
-    return self._calc_metric(outs)
+    hrr = self._calc_metric(outs)
+    self.log("val_metric", hrr)
+    return hrr
 
 
 class MLP(torch.nn.Module):
