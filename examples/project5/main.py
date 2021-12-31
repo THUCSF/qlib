@@ -43,7 +43,7 @@ def plot_br(x_dls, ys, trainer, learner, model_dir, model_name, subfix=""):
 def plot_normal(x_dls, ys, trainer, learner, model_dir, model_name, subfix=""):
   points = []
   for i in range(3):
-    out = torch.cat(trainer.predict(learner, x_dls))
+    out = torch.cat(trainer.predict(learner, x_dls[i]))
     score = learner.pred2score(out)
     points.append(torch2numpy(score))
 
@@ -60,8 +60,8 @@ def plot_normal(x_dls, ys, trainer, learner, model_dir, model_name, subfix=""):
 
 def main(args, model_dir):
   model_name = f"r{args.repeat_ind}_y{args.train_start}-y{args.test_end}"
-  if os.path.exists(f"{model_dir}/{model_name}/model.pth"):
-    print(f"=> {model_dir}/{model_name}/model.pth exists, skipped.")
+  if os.path.exists(f"{model_dir}/{model_name}/result.json"):
+    print(f"=> {model_dir}/{model_name}/result.json exists, skipped.")
     return
   args.label_expr = fetch_label(args.label_type)
   task = get_train_config(args)
@@ -81,6 +81,7 @@ def main(args, model_dir):
   x_valid = torch.from_numpy(x_valid.values).float()
   y_valid = torch.from_numpy(y_valid.values).float()
   if args.loss_type == "cls":
+    # not compatible with zscorenorm on label
     y_train = torch.cat([y_train, assign_5label(y_train)], 1)
     y_valid = torch.cat([y_valid, assign_5label(y_valid)], 1)
   del df_train, df_valid
@@ -90,21 +91,27 @@ def main(args, model_dir):
   val_dl = DataLoader(TensorDataset(x_valid, y_valid),
     batch_size=4096, shuffle=False, num_workers=1)
 
-  mc = ModelCheckpoint(save_weights_only=True,
-    dirpath=f"{model_dir}/{model_name}",
-    filename="{epoch}-{val_metric:.2f}",
-    monitor="val_metric", mode="max")
-  es = EarlyStopping("lr", patience=1e3, stopping_threshold=5e-6)
-  logger = pl_logger.TensorBoardLogger(f"{model_dir}/{model_name}")
-  trainer = pl.Trainer(
-    logger=logger,
-    max_epochs=args.n_epoch,
-    progress_bar_refresh_rate=1,
-    callbacks=[mc, es],
-    gpus=1,
-    distributed_backend='dp')
-  trainer.fit(learner, train_dl, val_dl)
-
+  if args.eval_only == "1":
+    print(f"=> Load from {model_dir}/{model_name}/model.pth")
+    learner.model.load_state_dict(torch.load(
+      f"{model_dir}/{model_name}/model.pth"))
+  else:
+    mc = ModelCheckpoint(save_weights_only=True,
+      dirpath=f"{model_dir}/{model_name}",
+      filename="{epoch}-{val_metric:.2f}",
+      monitor="val_metric", mode="max")
+    es = EarlyStopping("lr", patience=1e3, stopping_threshold=5e-6)
+    logger = pl_logger.TensorBoardLogger(f"{model_dir}/{model_name}")
+    trainer = pl.Trainer(
+      logger=logger,
+      max_epochs=args.n_epoch,
+      progress_bar_refresh_rate=1,
+      callbacks=[mc, es],
+      gpus=1,
+      distributed_backend='dp')
+    trainer.fit(learner, train_dl, val_dl)
+  torch.save(learner.model.state_dict(),
+    f"{model_dir}/{model_name}/model.pth") # this is the latest model
   final_res, _, _ = simple_backtest(learner, dataset, args)
 
   df_test = dataset.prepare(["test"], col_set=["feature", "label"],
@@ -119,13 +126,15 @@ def main(args, model_dir):
     batch_size=4096, shuffle=False, num_workers=1)
 
   x_dls = [train_dl, val_dl, test_dl]
-  ys = [y_train[:, 0] if args.loss_type == "cls" else y_train,
-    y_valid, y_test]
+  if args.loss_type == "cls":
+    ys = [y_train[:, 0], y_valid[:, 0], y_test]
+  else:
+    ys = [y_train, y_valid, y_test]
   if "br" in args.loss_type:
     plot_br(x_dls, ys, trainer, learner, model_dir, model_name,
       subfix="final")
   else:
-    plot_normal(test_dl, ys, trainer, learner, model_dir, model_name,
+    plot_normal(x_dls, ys, trainer, learner, model_dir, model_name,
       subfix="final")
 
   best_model = glob.glob(f"{model_dir}/{model_name}/*.ckpt")[0]
@@ -136,28 +145,27 @@ def main(args, model_dir):
     plot_br(x_dls, ys, trainer, learner, model_dir, model_name,
       subfix="best")
   else:
-    plot_normal(test_dl, ys, trainer, learner, model_dir, model_name,
+    plot_normal(x_dls, ys, trainer, learner, model_dir, model_name,
       subfix="best")
 
   eval_result = {
     "final" : {
-      "ER" : float(final_res['excess_return_without_cost'].risk['annualized_return']),
-      "ERC" : float(final_res['excess_return_with_cost'].risk['annualized_return'])
+      "ER" : float(final_res['ER'].risk['annualized_return']),
+      "ERC" : float(final_res['ERC'].risk['annualized_return'])
     }, "best" : {
-      "ER" : float(best_res['excess_return_without_cost'].risk['annualized_return']),
-      "ERC" : float(best_res['excess_return_with_cost'].risk['annualized_return'])
+      "ER" : float(best_res['ER'].risk['annualized_return']),
+      "ERC" : float(best_res['ERC'].risk['annualized_return'])
+    }, "benchmark" : {
+      "R" : float(best_res['benchmark'].risk['annualized_return']),
     }}
   config = {
     "learner_config" : task["learner"],
     "model_config" : task["model"],
     "dataset_config" : task["dataset"]}
   with open(f"{model_dir}/{model_name}/config.json", "w") as f:
-    json.dump(config, f)
+    json.dump(config, f, indent=2)
   with open(f"{model_dir}/{model_name}/result.json", "w") as f:
-    json.dump(eval_result, f)
-  torch.save(learner.model.state_dict(),
-    f"{model_dir}/{model_name}/model.pth") # this is the latest model
-
+    json.dump(eval_result, f, indent=2)
 
 def fetch_label(label_type):
   if label_type == "pc-1":
@@ -194,6 +202,7 @@ if __name__ == "__main__":
     help="The label for prediction",
     choices=["pc-1"])
   # evaluation
+  parser.add_argument("--eval-only", default="0", type=str)
   parser.add_argument("--benchmark", default="SH000300", type=str)
   parser.add_argument("--test-start", default="2014", type=str)
   parser.add_argument("--test-end", default="2014", type=str)

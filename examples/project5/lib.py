@@ -6,7 +6,7 @@ import pandas as pd
 
 from qlib.contrib.evaluate import risk_analysis
 from qlib.backtest import backtest
-
+from qlib.backtest.signal import ModelSignal
 
 
 def set_cuda_devices(device_ids, use_cuda=True):
@@ -57,10 +57,11 @@ def simple_backtest(model, dataset, args):
     **port_analysis_config["backtest"])
   res = {}
   for _freq, (report_normal, positions_normal) in portfolio_metric_dict.items():
-    res["excess_return_without_cost"] = risk_analysis(
+    res["ER"] = risk_analysis(
       report_normal["return"] - report_normal["bench"], freq=_freq)
-    res["excess_return_with_cost"] = risk_analysis(
+    res["ERC"] = risk_analysis(
       report_normal["return"] - report_normal["bench"] - report_normal["cost"], freq=_freq)
+    res["benchmark"] = risk_analysis(report_normal["bench"], freq=_freq)
 
   keys = ['mean', 'std', 'annualized_return', 'max_drawdown']
   items = ['excess_return_with_cost', 'excess_return_without_cost']
@@ -220,10 +221,9 @@ def get_eval_config(model, dataset, args):
       "class": "TopkDropoutStrategy",
       "module_path": "qlib.contrib.strategy.signal_strategy",
       "kwargs": {
-        "model": model,
-        "dataset": dataset,
         "topk": 50,
         "n_drop": 5,
+        "signal": ModelSignal(model, dataset)
       },
     },
     "backtest": {

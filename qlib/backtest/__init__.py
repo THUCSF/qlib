@@ -160,8 +160,8 @@ def create_account_instance(
 def get_strategy_executor(
     start_time,
     end_time,
-    strategy: BaseStrategy,
-    executor: BaseExecutor,
+    strategy,
+    executor,
     benchmark: str = "SH000300",
     account: Union[float, int, Position] = 1e9,
     exchange_kwargs: dict = {},
