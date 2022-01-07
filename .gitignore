@@ -10,6 +10,7 @@ examples/project3/expr
 examples/project4/expr
 examples/project5/expr
 examples/project5/old_expr
+examples/project6/expr
 
 *mlruns
 *.pyc

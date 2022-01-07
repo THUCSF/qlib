@@ -1,19 +1,13 @@
-# Copyright (c) Microsoft Corporation.
-# Licensed under the MIT License.
-from __future__ import division
-from __future__ import print_function
-
-import torch, math, copy
-import numpy as np
+import torch, math
 import pandas as pd
-from typing import Text, Union
-
+import numpy as np
 import torch.nn.functional as F
 import pytorch_lightning as pl
+from tqdm import tqdm
+from typing import Text, Union
 
 from ...data.dataset import DatasetH
 from ...data.dataset.handler import DataHandlerLP
-from ...log import get_module_logger
 
 
 def collate_step_outputs(outs):
@@ -27,7 +21,7 @@ def collate_step_outputs(outs):
   return torch.cat(pred).squeeze(), torch.cat(y).squeeze()
 
 
-class Learner(pl.LightningModule):
+class RNNLearner(pl.LightningModule):
   def __init__(
     self,
     model,
@@ -51,17 +45,18 @@ class Learner(pl.LightningModule):
     self.model.to(self.device)
 
   def forward(self, batch):
+    # orig data, 
     x, y = batch
-    return self.model(x)
+    return batch, self.model(x["encoder_cont"])
 
   def training_step(self, batch, batch_idx):
     x, y = batch
-    pred = self.model(x)
-    loss = self.loss_fn(pred, y)
+    pred = self.model(x["encoder_cont"])
+    loss = self.loss_fn(pred, y[0])
     for param_group in self.optim.param_groups:
       self.log("lr", float(param_group['lr']))
       break
-    return {"loss" : loss, "y": y, "pred": pred}
+    return {"loss" : loss, "y": y[0], "pred": pred}
 
   def pred2score(self, pred):
     if "rgr" in self.loss_type:
@@ -88,6 +83,18 @@ class Learner(pl.LightningModule):
         + torch.log(pred_std).mean() + const 
     return loss
 
+  def predict_dataframe(self, df, tvcv_names):
+    self.model.eval()
+    index = df.index
+    scores = []
+    with torch.no_grad():
+      for _, stock_df in tqdm(df.groupby("instrument")):
+        x = torch.from_numpy(stock_df[tvcv_names].values).float()
+        pred = self.model(x.unsqueeze(0).cuda(), last_only=False)
+        score = self.pred2score(pred)
+        scores.append(score.detach().cpu().numpy())
+    return pd.Series(np.concatenate(scores), index=index)
+
   def predict_dataloader(self, dl, index):
     """Not applicable to time series.
     """
@@ -99,44 +106,11 @@ class Learner(pl.LightningModule):
         scores.append(pred.detach().cpu().numpy())
     return pd.Series(np.concatenate(scores), index=index)
 
-  def predict_dataframe(self, df):
-    """Not applicable to time series.
-    """
-    index = df.index
-    self.model.eval()
-    x_values = df.values
-    sample_num = x_values.shape[0]
-    scores = []
-    BS = 4096
-    with torch.no_grad():
-      for begin in range(sample_num)[::BS]:
-        end = min(sample_num, begin + BS)
-        x_batch = torch.from_numpy(x_values[begin:end]).float().to(self.device)
-        pred = self.pred2score(self.model(x_batch))
-        scores.append(pred.detach().cpu().numpy())
-    return pd.Series(np.concatenate(scores), index=index)
-
-  def predict(self, dataset: DatasetH, segment: Union[Text, slice] = "test"):
-    x_test = dataset.prepare(segment, col_set="feature", data_key=DataHandlerLP.DK_I)
-    index = x_test.index
-    self.model.eval()
-    x_values = x_test.values
-    sample_num = x_values.shape[0]
-    scores = []
-    BS = 4096
-    with torch.no_grad():
-      for begin in range(sample_num)[::BS]:
-        end = min(sample_num, begin + BS)
-        x_batch = torch.from_numpy(x_values[begin:end]).float().to(self.device)
-        pred = self.pred2score(self.model(x_batch))
-        scores.append(pred.detach().cpu().numpy())
-    return pd.Series(np.concatenate(scores), index=index)
-
   def configure_optimizers(self):
     self.optim = torch.optim.AdamW(self.model.parameters(),
       lr=self.lr, weight_decay=self.weight_decay)
     self.sched = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optim, mode="max")
-    return {"optimizer": self.optim, "lr_scheduler": self.sched, "monitor": "val_metric"}
+    return {"optimizer": self.optim, "lr_scheduler": self.sched, "monitor": "train_loss"}
 
   def _calc_high_rank_return(self, pred, y):
     score = self.pred2score(pred)
@@ -170,8 +144,8 @@ class Learner(pl.LightningModule):
 
   def validation_step(self, batch, batch_idx):
     x, y = batch
-    pred = self.model(x)
-    return {"y": y, "pred": pred}
+    pred = self.model(x["encoder_cont"])
+    return {"y": y[0], "pred": pred}
 
   def validation_step_end(self, outs):
     return outs
@@ -182,22 +156,19 @@ class Learner(pl.LightningModule):
     return hrr
 
 
-class MLP(torch.nn.Module):
-  def __init__(self, input_dim, output_dim,
-    hidden_dims=[256, 512, 768, 512, 256, 128, 64],
-    dropout=-1):
-    super(MLP, self).__init__()
-    dims = [input_dim] + hidden_dims
-    self.layers = torch.nn.ModuleList()
-    for i, (in_dim, out_dim) in enumerate(zip(dims[:-1], dims[1:])):
-      self.layers.append(torch.nn.Linear(in_dim, out_dim))
-      self.layers.append(torch.nn.ReLU(inplace=True))
-      self.layers.append(torch.nn.BatchNorm1d(out_dim))
-      if dropout > 0:
-        self.layers.append(torch.nn.Dropout(dropout))
-    self.layers.append(torch.nn.Linear(hidden_dims[-1], output_dim))
+class RNN(torch.nn.Module):
+  def __init__(self, type="LSTM", output_size=1, **kwargs):
+    super().__init__()
+    if type == "LSTM":
+      self.core = torch.nn.LSTM(
+        batch_first=True,
+        **kwargs)
+    self.fc_out = torch.nn.Linear(kwargs["hidden_size"], output_size)
 
-  def forward(self, x):
-    for layer in self.layers:
-      x = layer(x)
-    return x
+  def forward(self, x, last_only=True):
+    out, _ = self.core(x)
+    if last_only:
+      return self.fc_out(out[:, -1, :])
+    else:
+      out = self.fc_out(out.view(-1, out.shape[-1]))
+      return out.view(x.shape[0], x.shape[1], -1)

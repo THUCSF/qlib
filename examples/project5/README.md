@@ -1,1 +1,1 @@
-project 5: bayesian regression
+project 5: systematical experiment of MLP
