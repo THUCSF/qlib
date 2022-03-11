@@ -124,6 +124,25 @@ def _get_risk_analysis_figure(analysis_df: pd.DataFrame) -> Iterable[py.Figure]:
     return (_figure,)
 
 
+def get_monthly_return(report_normal_df: pd.DataFrame):
+    """Get analysis monthly graph figure
+    Added by Jianjin Xu.
+
+    :param report_normal_df:
+    :return:
+    """
+
+    if report_normal_df is None:
+        return []
+
+    _monthly_df = _get_monthly_risk_analysis_with_report(
+        report_normal_df=report_normal_df)
+
+    #for _feature in ["annualized_return", "max_drawdown", "information_ratio", "std"]:
+    return _get_monthly_analysis_with_feature(
+        _monthly_df, "annualized_return")
+
+
 def _get_monthly_risk_analysis_figure(report_normal_df: pd.DataFrame) -> Iterable[py.Figure]:
     """Get analysis monthly graph figure
 

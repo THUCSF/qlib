@@ -397,6 +397,7 @@ class RawPriceChange(Alpha158):
         inst_processor=None,
         **kwargs):
         self.window = kwargs["window"]
+        self.label = kwargs["label"]
         super().__init__(instruments, start_time, end_time, freq, infer_processors, learn_processors, fit_start_time, fit_end_time, process_type, filter_pipe, inst_processor, **kwargs)
 
     def get_feature_config(self):
@@ -412,7 +413,8 @@ class RawPriceChange(Alpha158):
         return self.parse_config_to_fields(conf)
 
     def get_label_config(self):
-        return (["Ref($close, -2)/Ref($close, -1) - 1"], ["LABEL0"])
+        return (self.label,
+            [f"LABEL{i}" for i in range(len(self.label))])
 
     @staticmethod
     def parse_config_to_fields(config):
@@ -473,12 +475,12 @@ class RawPriceChange(Alpha158):
             feature = config["diffprice"].get("feature", ["OPEN", "HIGH", "LOW", "CLOSE", "VWAP"])
             for field in feature:
                 field = field.lower()
-                fields += [f"{REF(field, d)}/{REF('close', d + 1)} - 1" for d in windows]
+                fields += [f"100 * ({REF(field, d)}/{REF('close', d + 1)} - 1)" for d in windows]
                 names += [f"DIFF{field.upper()}{d}" for d in windows]
         if "ema_vol_diff" in config:
             ema_length = max(len(windows), 5)
             windows = config["ema_vol_diff"].get("windows", range(10))
-            fields += [f"{REF('volume', d)}/EMA($volume, {ema_length}) - 1" for d in windows]
+            fields += [f"100 * ({REF('volume', d)}/EMA($volume, {ema_length}) - 1)" for d in windows]
             names += ["EVD" + str(d) for d in windows]
         if "volume" in config:
             windows = config["volume"].get("windows", range(10))
