@@ -124,13 +124,13 @@ class TRAModel(Model):
             loss = (pred - label).pow(2).mean()
 
             L = (all_preds.detach() - label[:, None]).pow(2)
-            L -= L.min(dim=-1, keepdim=True).values  # normalize & ensure postive input
+            L -= L.min(dim=-1, keepdim=True).values  # normalize & ensure positive input
 
             data_set.assign_data(index, L)  # save loss to memory
 
             if prob is not None:
                 P = sinkhorn(-L, epsilon=0.01)  # sample assignment matrix
-                lamb = self.lamb * (self.rho ** self.global_step)
+                lamb = self.lamb * (self.rho**self.global_step)
                 reg = prob.log().mul(P).sum(dim=-1).mean()
                 loss = loss - lamb * reg
 
@@ -165,7 +165,7 @@ class TRAModel(Model):
 
             L = (all_preds - label[:, None]).pow(2)
 
-            L -= L.min(dim=-1, keepdim=True).values  # normalize & ensure postive input
+            L -= L.min(dim=-1, keepdim=True).values  # normalize & ensure positive input
 
             data_set.assign_data(index, L)  # save loss to memory
 
@@ -484,7 +484,7 @@ class TRA(nn.Module):
 
     """Temporal Routing Adaptor (TRA)
 
-    TRA takes historical prediction erros & latent representation as inputs,
+    TRA takes historical prediction errors & latent representation as inputs,
     then routes the input sample to a specific predictor for training & inference.
 
     Args:
@@ -547,7 +547,7 @@ def evaluate(pred):
     score = pred.score
     label = pred.label
     diff = score - label
-    MSE = (diff ** 2).mean()
+    MSE = (diff**2).mean()
     MAE = (diff.abs()).mean()
     IC = score.corr(label)
     return {"MSE": MSE, "MAE": MAE, "IC": IC}

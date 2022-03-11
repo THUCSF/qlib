@@ -13,12 +13,12 @@ from .config import C
 
 
 class MetaLogger(type):
-    def __new__(cls, name, bases, dict):
+    def __new__(mcs, name, bases, attrs):  # pylint: disable=C0204
         wrapper_dict = logging.Logger.__dict__.copy()
         for key in wrapper_dict:
-            if key not in dict and key != "__reduce__":
-                dict[key] = wrapper_dict[key]
-        return type.__new__(cls, name, bases, dict)
+            if key not in attrs and key != "__reduce__":
+                attrs[key] = wrapper_dict[key]
+        return type.__new__(mcs, name, bases, attrs)
 
 
 class QlibLogger(metaclass=MetaLogger):
@@ -48,7 +48,7 @@ class QlibLogger(metaclass=MetaLogger):
         return self.logger.__getattribute__(name)
 
 
-def get_module_logger(module_name, level: Optional[int] = None) -> logging.Logger:
+def get_module_logger(module_name, level: Optional[int] = None) -> QlibLogger:
     """
     Get a logger for a specific module.
 
@@ -107,7 +107,7 @@ class TimeInspector:
         """
         Get last time mark from stack, calculate time diff with current time, and log time diff and info.
         :param info: str
-            Info that will be log into stdout.
+            Info that will be logged into stdout.
         """
         cost_time = time() - cls.time_marks.pop()
         cls.timer_logger.info("Time cost: {0:.3f}s | {1}".format(cost_time, info))
@@ -146,6 +146,7 @@ def set_log_with_config(log_config: Dict[Text, Any]):
 
 class LogFilter(logging.Filter):
     def __init__(self, param=None):
+        super().__init__()
         self.param = param
 
     @staticmethod
@@ -163,7 +164,7 @@ class LogFilter(logging.Filter):
         if isinstance(self.param, str):
             allow = not self.match_msg(self.param, record.msg)
         elif isinstance(self.param, list):
-            allow = not any([self.match_msg(p, record.msg) for p in self.param])
+            allow = not any(self.match_msg(p, record.msg) for p in self.param)
         return allow
 
 
@@ -200,7 +201,7 @@ def set_global_logger_level(level: int, return_orig_handler_level: bool = False)
 
     """
     _handler_level_map = {}
-    qlib_logger = logging.root.manager.loggerDict.get("qlib", None)
+    qlib_logger = logging.root.manager.loggerDict.get("qlib", None)  # pylint: disable=E1101
     if qlib_logger is not None:
         for _handler in qlib_logger.handlers:
             _handler_level_map[_handler] = _handler.level

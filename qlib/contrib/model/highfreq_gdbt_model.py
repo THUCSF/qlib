@@ -56,9 +56,9 @@ class HFLGBModel(ModelFT, LightGBMFInt):
 
     def hf_signal_test(self, dataset: DatasetH, threhold=0.2):
         """
-        Test the sigal in high frequency test set
+        Test the signal in high frequency test set
         """
-        if self.model == None:
+        if self.model is None:
             raise ValueError("Model hasn't been trained yet")
         df_test = dataset.prepare("test", col_set=["feature", "label"], data_key=DataHandlerLP.DK_I)
         df_test.dropna(inplace=True)
@@ -86,7 +86,7 @@ class HFLGBModel(ModelFT, LightGBMFInt):
             raise ValueError("Empty data from dataset, please check your dataset config.")
 
         x_train, y_train = df_train["feature"], df_train["label"]
-        x_valid, y_valid = df_train["feature"], df_valid["label"]
+        x_valid, y_valid = df_valid["feature"], df_valid["label"]
         if y_train.values.ndim == 2 and y_train.values.shape[1] == 1:
             l_name = df_train["label"].columns[0]
             # Convert label into alpha
@@ -111,7 +111,6 @@ class HFLGBModel(ModelFT, LightGBMFInt):
         early_stopping_rounds=50,
         verbose_eval=20,
         evals_result=dict(),
-        **kwargs
     ):
         dtrain, dvalid = self._prepare_data(dataset)
         self.model = lgb.train(
@@ -123,7 +122,6 @@ class HFLGBModel(ModelFT, LightGBMFInt):
             early_stopping_rounds=early_stopping_rounds,
             verbose_eval=verbose_eval,
             evals_result=evals_result,
-            **kwargs
         )
         evals_result["train"] = list(evals_result["train"].values())[0]
         evals_result["valid"] = list(evals_result["valid"].values())[0]

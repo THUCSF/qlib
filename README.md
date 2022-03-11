@@ -64,19 +64,26 @@ ipython scripts/process_china_stock.py
 Recent released features
 | Feature | Status |
 | --                      | ------    |
-| ADD model | [Released](https://github.com/microsoft/qlib/pull/704) on Nov 22, 2021 |
-| ADARNN  model | [Released](https://github.com/microsoft/qlib/pull/689) on Nov 14, 2021 |
-| TCN  model | [Released](https://github.com/microsoft/qlib/pull/668) on Nov 4, 2021 |
-|Temporal Routing Adaptor (TRA) | [Released](https://github.com/microsoft/qlib/pull/531) on July 30, 2021 |
-| Transformer & Localformer | [Released](https://github.com/microsoft/qlib/pull/508) on July 22, 2021 |
-| Release Qlib v0.7.0 | [Released](https://github.com/microsoft/qlib/releases/tag/v0.7.0) on July 12, 2021 |
-| TCTS Model | [Released](https://github.com/microsoft/qlib/pull/491) on July 1, 2021 |
-| Online serving and automatic model rolling | :star: [Released](https://github.com/microsoft/qlib/pull/290) on May 17, 2021 | 
-| DoubleEnsemble Model | [Released](https://github.com/microsoft/qlib/pull/286) on Mar 2, 2021 | 
-| High-frequency data processing example | [Released](https://github.com/microsoft/qlib/pull/257) on Feb 5, 2021  |
-| High-frequency trading example | [Part of code released](https://github.com/microsoft/qlib/pull/227) on Jan 28, 2021  | 
-| High-frequency data(1min) | [Released](https://github.com/microsoft/qlib/pull/221) on Jan 27, 2021 |
-| Tabnet Model | [Released](https://github.com/microsoft/qlib/pull/205) on Jan 22, 2021 | 
+| Point-in-Time database | :hammer: [Rleased](https://github.com/microsoft/qlib/pull/343) on Mar 10, 2022 |
+| Arctic Provider Backend & Orderbook data example | :hammer: [Rleased](https://github.com/microsoft/qlib/pull/744) on Jan 17, 2022 |
+| Arctic Provider Backend & Orderbook data example | :hammer: [Rleased](https://github.com/microsoft/qlib/pull/744) on Jan 17, 2022 |
+| Meta-Learning-based framework & DDG-DA  | :chart_with_upwards_trend:  :hammer: [Released](https://github.com/microsoft/qlib/pull/743) on Jan 10, 2022 | 
+| Planning-based portfolio optimization | :hammer: [Released](https://github.com/microsoft/qlib/pull/754) on Dec 28, 2021 | 
+| Release Qlib v0.8.0 | :octocat: [Released](https://github.com/microsoft/qlib/releases/tag/v0.8.0) on Dec 8, 2021 |
+| ADD model | :chart_with_upwards_trend: [Released](https://github.com/microsoft/qlib/pull/704) on Nov 22, 2021 |
+| ADARNN  model | :chart_with_upwards_trend: [Released](https://github.com/microsoft/qlib/pull/689) on Nov 14, 2021 |
+| TCN  model | :chart_with_upwards_trend: [Released](https://github.com/microsoft/qlib/pull/668) on Nov 4, 2021 |
+| Nested Decision Framework | :hammer: [Released](https://github.com/microsoft/qlib/pull/438) on Oct 1, 2021. [Example](https://github.com/microsoft/qlib/blob/main/examples/nested_decision_execution/workflow.py) and [Doc](https://qlib.readthedocs.io/en/latest/component/highfreq.html) |
+| Temporal Routing Adaptor (TRA) | :chart_with_upwards_trend: [Released](https://github.com/microsoft/qlib/pull/531) on July 30, 2021 |
+| Transformer & Localformer | :chart_with_upwards_trend: [Released](https://github.com/microsoft/qlib/pull/508) on July 22, 2021 |
+| Release Qlib v0.7.0 | :octocat: [Released](https://github.com/microsoft/qlib/releases/tag/v0.7.0) on July 12, 2021 |
+| TCTS Model | :chart_with_upwards_trend: [Released](https://github.com/microsoft/qlib/pull/491) on July 1, 2021 |
+| Online serving and automatic model rolling | :hammer:  [Released](https://github.com/microsoft/qlib/pull/290) on May 17, 2021 | 
+| DoubleEnsemble Model | :chart_with_upwards_trend: [Released](https://github.com/microsoft/qlib/pull/286) on Mar 2, 2021 | 
+| High-frequency data processing example | :hammer: [Released](https://github.com/microsoft/qlib/pull/257) on Feb 5, 2021  |
+| High-frequency trading example | :chart_with_upwards_trend: [Part of code released](https://github.com/microsoft/qlib/pull/227) on Jan 28, 2021  | 
+| High-frequency data(1min) | :rice: [Released](https://github.com/microsoft/qlib/pull/221) on Jan 27, 2021 |
+| Tabnet Model | :chart_with_upwards_trend: [Released](https://github.com/microsoft/qlib/pull/205) on Jan 22, 2021 | 
 
 Features released before 2021 are not listed here.
 
@@ -93,35 +100,58 @@ With Qlib, users can easily try ideas to create better Quant investment strategi
 
 For more details, please refer to our paper ["Qlib: An AI-oriented Quantitative Investment Platform"](https://arxiv.org/abs/2009.11189).
 
-- [**Plans**](#plans)
-- [Framework of Qlib](#framework-of-qlib)
-- [Quick Start](#quick-start)
-  - [Installation](#installation)
-  - [Data Preparation](#data-preparation)
-  - [Auto Quant Research Workflow](#auto-quant-research-workflow)
-  - [Building Customized Quant Research Workflow by Code](#building-customized-quant-research-workflow-by-code)
-- [**Quant Model(Paper) Zoo**](#quant-model-paper-zoo)
-  - [Run a single model](#run-a-single-model)
-  - [Run multiple models](#run-multiple-models)
-- [**Quant Dataset Zoo**](#quant-dataset-zoo)
-- [More About Qlib](#more-about-qlib)
-- [Offline Mode and Online Mode](#offline-mode-and-online-mode)
-  - [Performance of Qlib Data Server](#performance-of-qlib-data-server)
-- [Related Reports](#related-reports)
-- [Contact Us](#contact-us)
-- [Contributing](#contributing)
 
+<table>
+  <tbody>
+    <tr>
+      <th>Frameworks, Tutorial, Data & DevOps</th>
+      <th>Main Challenges & Solutions in Quant Research</th>
+    </tr>
+    <tr>
+      <td>
+        <li><a href="#plans"><strong>Plans</strong></a></li>
+        <li><a href="#framework-of-qlib">Framework of Qlib</a></li>
+        <li><a href="#quick-start">Quick Start</a></li>
+          <ul dir="auto">
+            <li type="circle"><a href="#installation">Installation</a> </li>
+            <li type="circle"><a href="#data-preparation">Data Preparation</a></li>
+            <li type="circle"><a href="#auto-quant-research-workflow">Auto Quant Research Workflow</a></li>
+            <li type="circle"><a href="#building-customized-quant-research-workflow-by-code">Building Customized Quant Research Workflow by Code</a></li></ul>
+        <li><a href="#quant-dataset-zoo"><strong>Quant Dataset Zoo</strong></a></li>
+        <li><a href="#more-about-qlib">More About Qlib</a></li>
+        <li><a href="#offline-mode-and-online-mode">Offline Mode and Online Mode</a>
+        <ul>
+          <li type="circle"><a href="#performance-of-qlib-data-server">Performance of Qlib Data Server</a></li></ul>
+        <li><a href="#related-reports">Related Reports</a></li>
+        <li><a href="#contact-us">Contact Us</a></li>
+        <li><a href="#contributing">Contributing</a></li>
+      </td>
+      <td valign="baseline">
+        <li><a href="#main-challenges--solutions-in-quant-research">Main Challenges &amp; Solutions in Quant Research</a>
+          <ul>
+            <li type="circle"><a href="#forecasting-finding-valuable-signalspatterns">Forecasting: Finding Valuable Signals/Patterns</a>
+              <ul>
+                <li type="disc"><a href="#quant-model-paper-zoo"><strong>Quant Model (Paper) Zoo</strong></a>
+                  <ul>
+                    <li type="circle"><a href="#run-a-single-model">Run a Single Model</a></li>
+                    <li type="circle"><a href="#run-multiple-models">Run Multiple Models</a></li>
+                  </ul>
+                </li>
+              </ul>
+            </li>
+          <li type="circle"><a href="#adapting-to-market-dynamics">Adapting to Market Dynamics</a></li>
+          </ul>
+        </li>
+      </td>
+    </tr>
+  </tbody>
+</table>
 
 # Plans
 New features under development(order by estimated release time).
 Your feedbacks about the features are very important.
-| Feature                        | Status      |
-| --                      | ------    |
-| Planning-based portfolio optimization | Under review:  https://github.com/microsoft/qlib/pull/280 | 
-| Fund data supporting and analysis  |  Under review: https://github.com/microsoft/qlib/pull/292 |
-| Point-in-Time database | Under review: https://github.com/microsoft/qlib/pull/343 |
-| High-frequency trading | Under review: https://github.com/microsoft/qlib/pull/408 | 
-| Meta-Learning-based data selection | Initial opensource version under development |
+<!-- | Feature                        | Status      | -->
+<!-- | --                      | ------    | -->
 
 # Framework of Qlib
 
@@ -135,7 +165,7 @@ At the module level, Qlib is a platform that consists of the above components. T
 | Name                   | Description                                                                                                                                                                                                                                                                                                                                                             |
 | ------                 | -----                                                                                                                                                                                                                                                                                                                                                                   |
 | `Infrastructure` layer | `Infrastructure` layer provides underlying support for Quant research. `DataServer` provides a high-performance infrastructure for users to manage and retrieve raw data. `Trainer` provides a flexible interface to control the training process of models, which enable algorithms to control the training process.                                                       |
-| `Workflow` layer       | `Workflow` layer covers the whole workflow of quantitative investment. `Information Extractor` extracts data for models. `Forecast Model` focuses on producing all kinds of forecast signals (e.g. _alpha_, risk) for other modules. With these signals `Portfolio Generator` will generate the target portfolio and produce orders to be executed by `Order Executor`. |
+| `Workflow` layer       | `Workflow` layer covers the whole workflow of quantitative investment. `Information Extractor` extracts data for models. `Forecast Model` focuses on producing all kinds of forecast signals (e.g. _alpha_, risk) for other modules. With these signals `Decision Generator` will generate the target trading decisions(i.e. portfolio, orders)  to be executed by `Execution Env` (i.e. the trading market).  There may be multiple levels of `Trading Agent` and `Execution Env` (e.g. an _order executor trading agent and intraday order execution environment_ could behave like an interday trading environment and nested in  _daily portfolio management trading agent and interday trading environment_  ) |
 | `Interface` layer      | `Interface` layer tries to present a user-friendly interface for the underlying system. `Analyser` module will provide users detailed analysis reports of forecasting signals, portfolios and execution results                                                                                                                                                                 |
 
 * The modules with hand-drawn style are under development and will be released in the future.
@@ -164,6 +194,7 @@ This table demonstrates the supported Python version of `Qlib`:
 1. **Conda** is suggested for managing your Python environment.
 1. Please pay attention that installing cython in Python 3.6 will raise some error when installing ``Qlib`` from source. If users use Python 3.6 on their machines, it is recommended to *upgrade* Python to version 3.7 or use `conda`'s Python to install ``Qlib`` from source.
 1. For Python 3.9, `Qlib` supports running workflows such as training models, doing backtest and plot most of the related figures (those included in [notebook](examples/workflow_by_code.ipynb)). However, plotting for the *model performance* is not supported for now and we will fix this when the dependent packages are upgraded in the future.
+1. `Qlib`Requires `tables` package, `hdf5` in tables does not support python3.9. 
 
 ### Install with pip
 Users can easily install ``Qlib`` by pip according to the following command.
@@ -185,17 +216,11 @@ Also, users can install the latest dev version ``Qlib`` by the source code accor
   ```
 
 * Clone the repository and install ``Qlib`` as follows.
-  * If you haven't installed qlib by the command ``pip install pyqlib`` before:
-    ```bash
-    git clone https://github.com/microsoft/qlib.git && cd qlib
-    python setup.py install
-    ```
-  * If you have already installed the stable version by the command ``pip install pyqlib``:
     ```bash
     git clone https://github.com/microsoft/qlib.git && cd qlib
     pip install .
     ```
-  **Note**: **Only** the command ``pip install .`` **can** overwrite the stable version installed by ``pip install pyqlib``, while the command ``python setup.py install`` **can't**.
+  **Note**:  You can install Qlib with `python setup.py install` as well. But it is not the recommanded approach. It will skip `pip` and cause obscure problems. For example, **only** the command ``pip install .`` **can** overwrite the stable version installed by ``pip install pyqlib``, while the command ``python setup.py install`` **can't**.
 
 **Tips**: If you fail to install `Qlib` or run the examples in your environment,  comparing your steps and the [CI workflow](.github/workflows/test.yml) may help you find the problem.
 
@@ -212,15 +237,17 @@ Load and prepare data by running the following code:
 
 This dataset is created by public data collected by [crawler scripts](scripts/data_collector/), which have been released in
 the same repository.
-Users could create the same dataset with it. 
+Users could create the same dataset with it. [Description of dataset](https://github.com/microsoft/qlib/tree/main/scripts/data_collector#description-of-dataset)
 
 *Please pay **ATTENTION** that the data is collected from [Yahoo Finance](https://finance.yahoo.com/lookup), and the data might not be perfect.
 We recommend users to prepare their own data if they have a high-quality dataset. For more information, users can refer to the [related document](https://qlib.readthedocs.io/en/latest/component/data.html#converting-csv-format-into-qlib-format)*.
 
 ### Automatic update of daily frequency data (from yahoo finance)
+  > This step is *Optional* if users only want to try their models and strategies on history data.
+  > 
   > It is recommended that users update the data manually once (--trading_date 2021-05-25) and then set it to update automatically.
-
-  > For more information refer to: [yahoo collector](https://github.com/microsoft/qlib/tree/main/scripts/data_collector/yahoo#automatic-update-of-daily-frequency-datafrom-yahoo-finance)
+  >
+  > For more information, please refer to: [yahoo collector](https://github.com/microsoft/qlib/tree/main/scripts/data_collector/yahoo#automatic-update-of-daily-frequency-datafrom-yahoo-finance)
 
   * Automatic update of data to the "qlib" directory each trading day(Linux)
       * use *crontab*: `crontab -e`
@@ -245,7 +272,7 @@ We recommend users to prepare their own data if they have a high-quality dataset
   ```python
   import qlib
   from qlib.data import D
-  from qlib.config import REG_CN
+  from qlib.constant import REG_CN
 
   # Initialization
   mount_path = "~/.qlib/qlib_data/cn_data"  # target_dir
@@ -330,8 +357,18 @@ Qlib provides a tool named `qrun` to run the whole workflow automatically (inclu
 ## Building Customized Quant Research Workflow by Code
 The automatic workflow may not suit the research workflow of all Quant researchers. To support a flexible Quant research workflow, Qlib also provides a modularized interface to allow researchers to build their own workflow by code. [Here](examples/workflow_by_code.ipynb) is a demo for customized Quant research workflow by code.
 
+# Main Challenges & Solutions in Quant Research
+Quant investment is an very unique scenario with lots of key challenges to be solved.
+Currently, Qlib provides some solutions for several of them.
 
-# [Quant Model (Paper) Zoo](examples/benchmarks)
+## Forecasting: Finding Valuable Signals/Patterns
+Accurate forecasting of the stock price trend is a very important part to construct profitable portfolios.
+However, huge amount of data with various formats in the financial market which make it challenging to build forecasting models.
+
+An increasing number of SOTA Quant research works/papers, which focus on building forecasting models to mine valuable signals/patterns in complex financial data, are released in `Qlib`
+
+
+### [Quant Model (Paper) Zoo](examples/benchmarks)
 
 Here is a list of models built on `Qlib`.
 - [GBDT based on XGBoost (Tianqi Chen, et al. KDD 2016)](examples/benchmarks/XGBoost/)
@@ -358,7 +395,7 @@ Your PR of new Quant models is highly welcomed.
 
 The performance of each model on the `Alpha158` and `Alpha360` dataset can be found [here](examples/benchmarks/README.md).
 
-## Run a single model
+### Run a single model
 All the models listed above are runnable with ``Qlib``. Users can find the config files we provide and some details about the model through the [benchmarks](examples/benchmarks) folder. More information can be retrieved at the model files listed above.
 
 `Qlib` provides three different ways to run a single model, users can pick the one that fits their cases best:
@@ -368,7 +405,7 @@ All the models listed above are runnable with ``Qlib``. Users can find the confi
 - Users can use the script [`run_all_model.py`](examples/run_all_model.py) listed in the `examples` folder to run a model. Here is an example of the specific shell command to be used: `python run_all_model.py run --models=lightgbm`, where the `--models` arguments can take any number of models listed above(the available models can be found  in [benchmarks](examples/benchmarks/)). For more use cases, please refer to the file's [docstrings](examples/run_all_model.py).
     - **NOTE**: Each baseline has different environment dependencies, please make sure that your python version aligns with the requirements(e.g. TFT only supports Python 3.6~3.7 due to the limitation of `tensorflow==1.15.0`)
 
-## Run multiple models
+### Run multiple models
 `Qlib` also provides a script [`run_all_model.py`](examples/run_all_model.py) which can run multiple models for several iterations. (**Note**: the script only support *Linux* for now. Other OS will be supported in the future. Besides, it doesn't support parallel running the same model for multiple times as well, and this will be fixed in the future development too.)
 
 The script will create a unique virtual environment for each model, and delete the environments after training. Thus, only experiment results such as `IC` and `backtest` results will be generated and stored.
@@ -380,6 +417,14 @@ python run_all_model.py run 10
 
 It also provides the API to run specific models at once. For more use cases, please refer to the file's [docstrings](examples/run_all_model.py). 
 
+## [Adapting to Market Dynamics](examples/benchmarks_dynamic)
+
+Due to the non-stationary nature of the environment of the financial market, the data distribution may change in different periods, which makes the performance of models build on training data decays in the future test data.
+So adapting the forecasting models/strategies to market dynamics is very important to the model/strategies' performance.
+
+Here is a list of solutions built on `Qlib`.
+- [Rolling Retraining](examples/benchmarks_dynamic/baseline/)
+- [DDG-DA on pytorch (Wendi, et al. AAAI 2022)](examples/benchmarks_dynamic/DDG-DA/)
 
 # Quant Dataset Zoo
 Dataset plays a very important role in Quant. Here is a list of the datasets built on `Qlib`:
@@ -450,17 +495,36 @@ Join IM discussion groups:
 |![image](http://fintech.msra.cn/images_v070/qrcode/gitter_qr.png)|
 
 # Contributing
+We appreciate all contributions and thank all the contributors!
+<a href="https://github.com/microsoft/qlib/graphs/contributors"><img src="https://contrib.rocks/image?repo=microsoft/qlib" /></a>
+
+Before we released Qlib as an open-source project on Github in Sep 2020, Qlib is an internal project in our group. Unfortunately, the internal commit history is not kept. A lot of members in our group have also contributed a lot to Qlib, which includes Ruihua Wang, Yinda Zhang, Haisu Yu, Shuyu Wang, Bochen Pang, and [Dong Zhou](https://github.com/evanzd/evanzd). Especially thanks to [Dong Zhou](https://github.com/evanzd/evanzd) due to his initial version of Qlib.
+
+## Guidance
 
 This project welcomes contributions and suggestions.  
 **Here are some 
-[code standards](docs/developer/code_standard.rst) when you submit a pull request.**
+[code standards](docs/developer/code_standard.rst) for submiting a pull request.**
 
-If you want to contribute to Qlib's document, you can follow the steps in the figure below.
+Making contributions is not a hard thing. Solving an issue(maybe just answering a question raised in [issues list](https://github.com/microsoft/qlib/issues) or [gitter](https://gitter.im/Microsoft/qlib)), fixing/issuing a bug, improving the documents and even fixing a typo are important contributions to Qlib.
+
+For example, if you want to contribute to Qlib's document/code, you can follow the steps in the figure below.
 <p align="center">
   <img src="https://github.com/demon143/qlib/blob/main/docs/_static/img/change%20doc.gif" />
 </p>
 
+If you don't know how to start to contribute, you can refer to the following examples.
+| Type | Examples |
+| -- | -- |
+| Solving issues | [Answer a question](https://github.com/microsoft/qlib/issues/749);  [issuing](https://github.com/microsoft/qlib/issues/765) or [fixing](https://github.com/microsoft/qlib/pull/792) a bug |
+| Docs | [Improve docs quality](https://github.com/microsoft/qlib/pull/797/files) ;  [Fix a typo](https://github.com/microsoft/qlib/pull/774) | 
+| Feature |  Implement a [requested feature](https://github.com/microsoft/qlib/projects) like [this](https://github.com/microsoft/qlib/pull/754); [Refactor interfaces](https://github.com/microsoft/qlib/pull/539/files) |
+| Dataset | [Add a dataset](https://github.com/microsoft/qlib/pull/733) | 
+| Models |  [Implement a new model](https://github.com/microsoft/qlib/pull/689) | 
 
+If you would like to become one of Qlib's maintainers to contribute more (e.g. help merge PR, triage issues), please contact us by email([qlib@microsoft.com](mailto:qlib@microsoft.com)).  We are glad to help you to set the right permission.
+
+## Licence
 Most contributions require you to agree to a
 Contributor License Agreement (CLA) declaring that you have the right to, and actually do, grant us
 the right to use your contribution. For details, visit https://cla.opensource.microsoft.com.

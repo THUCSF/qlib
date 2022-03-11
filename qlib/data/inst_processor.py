@@ -5,7 +5,7 @@ import pandas as pd
 
 class InstProcessor:
     @abc.abstractmethod
-    def __call__(self, df: pd.DataFrame, *args, **kwargs):
+    def __call__(self, df: pd.DataFrame, instrument, *args, **kwargs):
         """
         process the data
 
@@ -17,7 +17,6 @@ class InstProcessor:
         df : pd.DataFrame
             The raw_df of handler or result from previous processor.
         """
-        pass
 
     def __str__(self):
         return f"{self.__class__.__name__}:{json.dumps(self.__dict__, sort_keys=True, default=str)}"

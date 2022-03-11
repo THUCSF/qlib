@@ -8,10 +8,8 @@ This allows us to use efficient submodels as the market-style changing.
 """
 
 from typing import List, Union
-from qlib.data.dataset import TSDatasetH
 
 from qlib.log import get_module_logger
-from qlib.utils import get_callable_kwargs
 from qlib.utils.exceptions import LoadObjectError
 from qlib.workflow.online.update import PredUpdater
 from qlib.workflow.recorder import Recorder
@@ -169,14 +167,8 @@ class OnlineToolR(OnlineTool):
         exp_name = self._get_exp_name(exp_name)
         online_models = self.online_models(exp_name=exp_name)
         for rec in online_models:
-            hist_ref = 0
-            task = rec.load_object("task")
-            # Special treatment of historical dependencies
-            cls, kwargs = get_callable_kwargs(task["dataset"], default_module="qlib.data.dataset")
-            if issubclass(cls, TSDatasetH):
-                hist_ref = kwargs.get("step_len", TSDatasetH.DEFAULT_STEP_LEN)
             try:
-                updater = PredUpdater(rec, to_date=to_date, from_date=from_date, hist_ref=hist_ref)
+                updater = PredUpdater(rec, to_date=to_date, from_date=from_date)
             except LoadObjectError as e:
                 # skip the recorder without pred
                 self.logger.warn(f"An exception `{str(e)}` happened when load `pred.pkl`, skip it.")

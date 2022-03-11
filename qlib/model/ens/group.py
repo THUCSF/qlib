@@ -3,9 +3,9 @@
 
 """
 Group can group a set of objects based on `group_func` and change them to a dict.
-After group, we provide a method to reduce them. 
+After group, we provide a method to reduce them.
 
-For example: 
+For example:
 
 group: {(A,B,C1): object, (A,B,C2): object} -> {(A,B): {C1: object, C2: object}}
 reduce: {(A,B): {C1: object, C2: object}} -> {(A,B): object}
@@ -13,7 +13,7 @@ reduce: {(A,B): {C1: object, C2: object}} -> {(A,B): object}
 """
 
 from qlib.model.ens.ensemble import Ensemble, RollingEnsemble
-from typing import Callable, Union
+from typing import Callable
 from joblib import Parallel, delayed
 
 
@@ -107,7 +107,9 @@ class RollingGroup(Group):
         for key, values in rolling_dict.items():
             if isinstance(key, tuple):
                 grouped_dict.setdefault(key[:-1], {})[key[-1]] = values
+            else:
+                raise TypeError(f"Expected `tuple` type, but got a value `{key}`")
         return grouped_dict
 
-    def __init__(self):
-        super().__init__(ens=RollingEnsemble())
+    def __init__(self, ens=RollingEnsemble()):
+        super().__init__(ens=ens)

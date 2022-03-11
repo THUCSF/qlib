@@ -55,9 +55,9 @@ class TradeCalendarManager:
         self.start_time = pd.Timestamp(start_time) if start_time else None
         self.end_time = pd.Timestamp(end_time) if end_time else None
 
-        _calendar = Cal.calendar(freq=freq)
+        _calendar = Cal.calendar(freq=freq, future=True)
         self._calendar = _calendar
-        _, _, _start_index, _end_index = Cal.locate_index(start_time, end_time, freq=freq)
+        _, _, _start_index, _end_index = Cal.locate_index(start_time, end_time, freq=freq, future=True)
         self.start_index = _start_index
         self.end_index = _end_index
         self.trade_len = _end_index - _start_index + 1
@@ -70,7 +70,7 @@ class TradeCalendarManager:
         - If self.trade_step >= self.self.trade_len, it means the trading is finished
         - If self.trade_step < self.self.trade_len, it means the number of trading step finished is self.trade_step
         """
-        return self.trade_step >= self.trade_len - 1
+        return self.trade_step >= self.trade_len
 
     def step(self):
         if self.finished():
@@ -93,7 +93,7 @@ class TradeCalendarManager:
 
         About the endpoints:
             - Qlib uses the closed interval in time-series data selection, which has the same performance as pandas.Series.loc
-            # - The returned right endpoints should minus 1 seconds becasue of the closed interval representation in Qlib.
+            # - The returned right endpoints should minus 1 seconds because of the closed interval representation in Qlib.
             # Note: Qlib supports up to minutely decision execution, so 1 seconds is less than any trading time interval.
 
         Parameters
@@ -205,10 +205,7 @@ class BaseInfrastructure:
             warnings.warn(f"infra {infra_name} is not found!")
 
     def has(self, infra_name):
-        if infra_name in self.get_support_infra() and hasattr(self, infra_name):
-            return True
-        else:
-            return False
+        return infra_name in self.get_support_infra() and hasattr(self, infra_name)
 
     def update(self, other):
         support_infra = other.get_support_infra()
@@ -222,7 +219,7 @@ class CommonInfrastructure(BaseInfrastructure):
 
 
 class LevelInfrastructure(BaseInfrastructure):
-    """level instrastructure is created by executor, and then shared to strategies on the same level"""
+    """level infrastructure is created by executor, and then shared to strategies on the same level"""
 
     def get_support_infra(self):
         """

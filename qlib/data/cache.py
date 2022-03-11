@@ -33,8 +33,7 @@ from ..utils import (
 
 from ..log import get_module_logger
 from .base import Feature
-
-from .ops import Operators
+from .ops import Operators  # pylint: disable=W0611
 
 
 class QlibCacheException(RuntimeError):
@@ -147,6 +146,7 @@ class MemCache:
         """
 
         size_limit = C.mem_cache_size_limit if mem_cache_size_limit is None else mem_cache_size_limit
+        limit_type = C.mem_cache_limit_type if limit_type is None else limit_type
 
         if limit_type == "length":
             klass = MemCacheLengthUnit
@@ -228,8 +228,8 @@ class CacheUtils:
                 try:
                     d["meta"]["last_visit"] = str(time.time())
                     d["meta"]["visits"] = d["meta"]["visits"] + 1
-                except KeyError:
-                    raise KeyError("Unknown meta keyword")
+                except KeyError as key_e:
+                    raise KeyError("Unknown meta keyword") from key_e
                 pickle.dump(d, f, protocol=C.dump_protocol_version)
         except Exception as e:
             get_module_logger("CacheUtils").warning(f"visit {cache_path} cache error: {e}")
@@ -238,7 +238,7 @@ class CacheUtils:
     def acquire(lock, lock_name):
         try:
             lock.acquire()
-        except redis_lock.AlreadyAcquired:
+        except redis_lock.AlreadyAcquired as lock_acquired:
             raise QlibCacheException(
                 f"""It sees the key(lock:{repr(lock_name)[1:-1]}-wlock) of the redis lock has existed in your redis db now.
                     You can use the following command to clear your redis keys and rerun your commands:
@@ -248,7 +248,7 @@ class CacheUtils:
                     > quit
                     If the issue is not resolved, use "keys *" to find if multiple keys exist. If so, try using "flushall" to clear all the keys.
                 """
-            )
+            ) from lock_acquired
 
     @staticmethod
     @contextlib.contextmanager
@@ -359,7 +359,7 @@ class ExpressionCache(BaseProviderCache):
     def update(self, cache_uri: Union[str, Path], freq: str = "day"):
         """Update expression cache to latest calendar.
 
-        Overide this method to define how to update expression cache corresponding to users' own cache mechanism.
+        Override this method to define how to update expression cache corresponding to users' own cache mechanism.
 
         Parameters
         ----------
@@ -445,7 +445,7 @@ class DatasetCache(BaseProviderCache):
     def update(self, cache_uri: Union[str, Path], freq: str = "day"):
         """Update dataset cache to latest calendar.
 
-        Overide this method to define how to update dataset cache corresponding to users' own cache mechanism.
+        Override this method to define how to update dataset cache corresponding to users' own cache mechanism.
 
         Parameters
         ----------
@@ -506,7 +506,7 @@ class DiskExpressionCache(ExpressionCache):
         _instrument_dir = self.get_cache_dir(freq).joinpath(instrument.lower())
         cache_path = _instrument_dir.joinpath(_cache_uri)
         # get calendar
-        from .data import Cal
+        from .data import Cal  # pylint: disable=C0415
 
         _calendar = Cal.calendar(freq=freq)
 
@@ -543,7 +543,7 @@ class DiskExpressionCache(ExpressionCache):
                 # instance
                 series = self.provider.expression(instrument, field, _calendar[0], _calendar[-1], freq)
                 if not series.empty:
-                    # This expresion is empty, we don't generate any cache for it.
+                    # This expression is empty, we don't generate any cache for it.
                     with CacheUtils.writer_lock(self.r, f"{str(C.dpm.get_data_uri(freq))}:expression-{_cache_uri}"):
                         self.gen_expression_cache(
                             expression_data=series,
@@ -598,7 +598,7 @@ class DiskExpressionCache(ExpressionCache):
             last_update_time = d["info"]["last_update"]
 
             # get newest calendar
-            from .data import Cal, ExpressionD
+            from .data import Cal, ExpressionD  # pylint: disable=C0415
 
             whole_calendar = Cal.calendar(start_time=None, end_time=None, freq=freq)
             # calendar since last updated.
@@ -752,7 +752,7 @@ class DiskDatasetCache(DatasetCache):
         if disk_cache == 0:
             # In this case, server only checks the expression cache.
             # The client will load the cache data by itself.
-            from .data import LocalDatasetProvider
+            from .data import LocalDatasetProvider  # pylint: disable=C0415
 
             LocalDatasetProvider.multi_cache_walker(instruments, fields, start_time, end_time, freq)
             return ""
@@ -858,7 +858,7 @@ class DiskDatasetCache(DatasetCache):
         """gen_dataset_cache
 
         .. note:: This function does not consider the cache read write lock. Please
-        Aquire the lock outside this function
+        Acquire the lock outside this function
 
         The format the cache contains 3 parts(followed by typical filename).
 
@@ -894,7 +894,7 @@ class DiskDatasetCache(DatasetCache):
         :return type pd.DataFrame; The fields of the returned DataFrame are consistent with the parameters of the function.
         """
         # get calendar
-        from .data import Cal
+        from .data import Cal  # pylint: disable=C0415
 
         cache_path = Path(cache_path)
         _calendar = Cal.calendar(freq=freq)
@@ -969,14 +969,14 @@ class DiskDatasetCache(DatasetCache):
             index_data = im.get_index()
 
             self.logger.debug("Updating dataset: {}".format(d))
-            from .data import Inst
+            from .data import Inst  # pylint: disable=C0415
 
             if Inst.get_inst_type(instruments) == Inst.DICT:
                 self.logger.info(f"The file {cache_uri} has dict cache. Skip updating")
                 return 1
 
             # get newest calendar
-            from .data import Cal
+            from .data import Cal  # pylint: disable=C0415
 
             whole_calendar = Cal.calendar(start_time=None, end_time=None, freq=freq)
             # The calendar since last updated
@@ -993,7 +993,7 @@ class DiskDatasetCache(DatasetCache):
                 current_index = len(whole_calendar) - len(new_calendar) + 1
 
                 # To avoid recursive import
-                from .data import ExpressionD
+                from .data import ExpressionD  # pylint: disable=C0415
 
                 # The existing data length
                 lft_etd = rght_etd = 0
@@ -1035,7 +1035,7 @@ class DiskDatasetCache(DatasetCache):
                 # FIXME:
                 # Because the feature cache are stored as .bin file.
                 # So the series read from features are all float32.
-                # However, the first dataset cache is calulated based on the
+                # However, the first dataset cache is calculated based on the
                 # raw data. So the data type may be float64.
                 # Different data type will result in failure of appending data
                 if "/{}".format(DatasetCache.HDF_KEY) in store.keys():
@@ -1198,7 +1198,4 @@ class MemoryCalendarCache(CalendarCache):
         return result
 
 
-# MemCache sizeof
-HZ = MemCache(C.mem_cache_space_limit, limit_type="sizeof")
-# MemCache length
-H = MemCache(limit_type="length")
+H = MemCache()

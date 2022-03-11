@@ -34,7 +34,7 @@ def _group_return(pred_label: pd.DataFrame = None, reverse: bool = False, N: int
         {
             "Group%d"
             % (i + 1): pred_label_drop.groupby(level="datetime")["label"].apply(
-                lambda x: x[len(x) // N * i : len(x) // N * (i + 1)].mean()
+                lambda x: x[len(x) // N * i : len(x) // N * (i + 1)].mean()  # pylint: disable=W0640
             )
             for i in range(N)
         }
@@ -57,7 +57,7 @@ def _group_return(pred_label: pd.DataFrame = None, reverse: bool = False, N: int
     ).figure
 
     t_df = t_df.loc[:, ["long-short", "long-average"]]
-    _bin_size = ((t_df.max() - t_df.min()) / 20).min()
+    _bin_size = float(((t_df.max() - t_df.min()) / 20).min())
     group_hist_figure = SubplotsGraph(
         t_df,
         kind_map=dict(kind="DistplotGraph", kwargs=dict(bin_size=_bin_size)),

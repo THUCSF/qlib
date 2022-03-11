@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 
 from .handler import DataHandler
-from typing import Tuple, Union, List, Callable
+from typing import Union, List, Callable
 
 from .utils import get_level_index, fetch_df_by_index, fetch_df_by_col
 
@@ -59,11 +59,11 @@ class BaseHandlerStorage:
         raise NotImplementedError("is_proc_func_supported method is not implemented!")
 
 
-class HasingStockStorage(BaseHandlerStorage):
-    """Hasing data storage for datahanlder
+class HashingStockStorage(BaseHandlerStorage):
+    """Hashing data storage for datahanlder
     - The default data storage pandas.DataFrame is too slow when randomly accessing one stock's data
-    - HasingStockStorage hashes the multiple stocks' data(pandas.DataFrame) by the key `stock_id`.
-    - HasingStockStorage hases the pandas.DataFrame into a dict, whose key is the stock_id(str) and value this stock data(panda.DataFrame), it has the following format:
+    - HashingStockStorage hashes the multiple stocks' data(pandas.DataFrame) by the key `stock_id`.
+    - HashingStockStorage hashes the pandas.DataFrame into a dict, whose key is the stock_id(str) and value this stock data(panda.DataFrame), it has the following format:
         {
             stock1_id: stock1_data,
             stock2_id: stock2_data,
@@ -82,7 +82,7 @@ class HasingStockStorage(BaseHandlerStorage):
 
     @staticmethod
     def from_df(df):
-        return HasingStockStorage(df)
+        return HashingStockStorage(df)
 
     def _fetch_hash_df_by_stock(self, selector, level):
         """fetch the data with stock selector
@@ -109,7 +109,7 @@ class HasingStockStorage(BaseHandlerStorage):
                 stock_selector = selector[self.stock_level]
             elif isinstance(selector, (list, str)) and self.stock_level == 0:
                 stock_selector = selector
-        elif level == "instrument" or level == self.stock_level:
+        elif level in ("instrument", self.stock_level):
             if isinstance(selector, tuple):
                 stock_selector = selector[0]
             elif isinstance(selector, (list, str)):
@@ -153,5 +153,5 @@ class HasingStockStorage(BaseHandlerStorage):
             return pd.concat(fetch_stock_df_list, sort=False, copy=~fetch_orig)
 
     def is_proc_func_supported(self):
-        """the arg `proc_func` in `fetch` method is not supported in HasingStockStorage"""
+        """the arg `proc_func` in `fetch` method is not supported in HashingStockStorage"""
         return False

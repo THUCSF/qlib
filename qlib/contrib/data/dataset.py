@@ -7,8 +7,7 @@ import warnings
 import numpy as np
 import pandas as pd
 
-from qlib.utils import init_instance_by_config
-from qlib.data.dataset import DatasetH, DataHandler
+from qlib.data.dataset import DatasetH
 
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -16,7 +15,7 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 
 def _to_tensor(x):
     if not isinstance(x, torch.Tensor):
-        return torch.tensor(x, dtype=torch.float, device=device)
+        return torch.tensor(x, dtype=torch.float, device=device)  # pylint: disable=E1101
     return x
 
 
@@ -63,9 +62,7 @@ def _get_date_parse_fn(target):
         get_date_parse_fn('20120101')('2017-01-01') => '20170101'
         get_date_parse_fn(20120101)('2017-01-01') => 20170101
     """
-    if isinstance(target, pd.Timestamp):
-        _fn = lambda x: pd.Timestamp(x)  # Timestamp('2020-01-01')
-    elif isinstance(target, int):
+    if isinstance(target, int):
         _fn = lambda x: int(str(x).replace("-", "")[:8])  # 20200201
     elif isinstance(target, str) and len(target) == 8:
         _fn = lambda x: str(x).replace("-", "")[:8]  # '20200201'
@@ -158,7 +155,7 @@ class MTSDatasetH(DatasetH):
         try:
             df = self.handler._learn.copy()  # use copy otherwise recorder will fail
             # FIXME: currently we cannot support switching from `_learn` to `_infer` for inference
-        except:
+        except Exception:
             warnings.warn("cannot access `_learn`, will load raw data")
             df = self.handler._data.copy()
         df.index = df.index.swaplevel()

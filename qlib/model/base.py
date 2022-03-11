@@ -4,6 +4,7 @@ import abc
 from typing import Text, Union
 from ..utils.serial import Serializable
 from ..data.dataset import Dataset
+from ..data.dataset.weight import Reweighter
 
 
 class BaseModel(Serializable, metaclass=abc.ABCMeta):
@@ -12,7 +13,6 @@ class BaseModel(Serializable, metaclass=abc.ABCMeta):
     @abc.abstractmethod
     def predict(self, *args, **kwargs) -> object:
         """Make predictions after modeling things"""
-        pass
 
     def __call__(self, *args, **kwargs) -> object:
         """leverage Python syntactic sugar to make the models' behaviors like functions"""
@@ -22,7 +22,7 @@ class BaseModel(Serializable, metaclass=abc.ABCMeta):
 class Model(BaseModel):
     """Learnable Models"""
 
-    def fit(self, dataset: Dataset):
+    def fit(self, dataset: Dataset, reweighter: Reweighter):
         """
         Learn model from the base model
 

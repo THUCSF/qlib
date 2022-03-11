@@ -1,9 +1,9 @@
 from ...utils.serial import Serializable
-from typing import Union, List, Tuple, Dict, Text, Optional
+from typing import Callable, Union, List, Tuple, Dict, Text, Optional
 from ...utils import init_instance_by_config, np_ffill, time_to_slc_point
 from ...log import get_module_logger
 from .handler import DataHandler, DataHandlerLP
-from copy import deepcopy
+from copy import copy, deepcopy
 from inspect import getfullargspec
 import pandas as pd
 import numpy as np
@@ -52,7 +52,6 @@ class Dataset(Serializable):
 
         - User prepare data for model based on previous status.
         """
-        pass
 
     def prepare(self, **kwargs) -> object:
         """
@@ -68,7 +67,6 @@ class Dataset(Serializable):
         object:
             return the object
         """
-        pass
 
 
 class DatasetH(Dataset):
@@ -82,7 +80,10 @@ class DatasetH(Dataset):
 
         - The processing is related to data split.
     """
-    def __init__(self, handler: Union[Dict, DataHandler], segments: Dict[Text, Tuple], **kwargs):
+
+    def __init__(
+        self, handler: Union[Dict, DataHandler], segments: Dict[Text, Tuple], fetch_kwargs: Dict = {}, **kwargs
+    ):
         """
         Setup the underlying data.
 
@@ -113,7 +114,7 @@ class DatasetH(Dataset):
         """
         self.handler: DataHandler = init_instance_by_config(handler, accept_types=DataHandler)
         self.segments = segments.copy()
-        self.fetch_kwargs = {}
+        self.fetch_kwargs = copy(fetch_kwargs)
         super().__init__(**kwargs)
 
     def prepare(
@@ -222,18 +223,103 @@ class DatasetH(Dataset):
             name=self.__class__.__name__, handler=self.handler, segments=self.segments
         )
 
-    def _prepare_seg(self, slc: slice, **kwargs):
+    def _prepare_seg(self, slc, **kwargs):
         """
-        Give a slice, retrieve the according data
+        Give a query, retrieve the according data
 
         Parameters
         ----------
-        slc : slice
+        slc : please refer to the docs of `prepare`
         """
         if hasattr(self, "fetch_kwargs"):
             return self.handler.fetch(slc, **kwargs, **self.fetch_kwargs)
         else:
             return self.handler.fetch(slc, **kwargs)
+
+    def prepare(
+        self,
+        segments: Union[List[Text], Tuple[Text], Text, slice, pd.Index],
+        col_set=DataHandler.CS_ALL,
+        data_key=DataHandlerLP.DK_I,
+        **kwargs,
+    ) -> Union[List[pd.DataFrame], pd.DataFrame]:
+        """
+        Prepare the data for learning and inference.
+
+        Parameters
+        ----------
+        segments : Union[List[Text], Tuple[Text], Text, slice]
+            Describe the scope of the data to be prepared
+            Here are some examples:
+
+            - 'train'
+
+            - ['train', 'valid']
+
+        col_set : str
+            The col_set will be passed to self.handler when fetching data.
+        data_key : str
+            The data to fetch:  DK_*
+            Default is DK_I, which indicate fetching data for **inference**.
+
+        kwargs :
+            The parameters that kwargs may contain:
+                flt_col : str
+                    It only exists in TSDatasetH, can be used to add a column of data(True or False) to filter data.
+                    This parameter is only supported when it is an instance of TSDatasetH.
+
+        Returns
+        -------
+        Union[List[pd.DataFrame], pd.DataFrame]:
+
+        Raises
+        ------
+        NotImplementedError:
+        """
+        logger = get_module_logger("DatasetH")
+        seg_kwargs = {"col_set": col_set}
+        seg_kwargs.update(kwargs)
+        if "data_key" in getfullargspec(self.handler.fetch).args:
+            seg_kwargs["data_key"] = data_key
+        else:
+            logger.info(f"data_key[{data_key}] is ignored.")
+
+        # Conflictions may happen here
+        # - The fetched data and the segment key may both be string
+        # To resolve the confliction
+        # - The segment name will have higher priorities
+
+        # 1) Use it as segment name first
+        if isinstance(segments, str) and segments in self.segments:
+            return self._prepare_seg(self.segments[segments], **seg_kwargs)
+
+        if isinstance(segments, (list, tuple)) and all(seg in self.segments for seg in segments):
+            return [self._prepare_seg(self.segments[seg], **seg_kwargs) for seg in segments]
+
+        # 2) Use pass it directly to prepare a single seg
+        return self._prepare_seg(segments, **seg_kwargs)
+
+    # helper functions
+    @staticmethod
+    def get_min_time(segments):
+        return DatasetH._get_extrema(segments, 0, (lambda a, b: a > b))
+
+    @staticmethod
+    def get_max_time(segments):
+        return DatasetH._get_extrema(segments, 1, (lambda a, b: a < b))
+
+    @staticmethod
+    def _get_extrema(segments, idx: int, cmp: Callable, key_func=pd.Timestamp):
+        """it will act like sort and return the max value or None"""
+        candidate = None
+        for k, seg in segments.items():
+            point = seg[idx]
+            if point is None:
+                # None indicates unbounded, return directly
+                return None
+            elif candidate is None or cmp(key_func(candidate), key_func(point)):
+                candidate = point
+        return candidate
 
 
 class TSDataSampler:
@@ -319,7 +405,7 @@ class TSDataSampler:
             flt_data = flt_data.reindex(self.data_index).fillna(False).astype(np.bool)
             self.flt_data = flt_data.values
             self.idx_map = self.flt_idx_map(self.flt_data, self.idx_map)
-            self.data_index = self.data_index[np.where(self.flt_data == True)[0]]
+            self.data_index = self.data_index[np.where(self.flt_data is True)[0]]
         self.idx_map = self.idx_map2arr(self.idx_map)
 
         self.start_idx, self.end_idx = self.data_index.slice_locs(
@@ -392,7 +478,7 @@ class TSDataSampler:
                 2021-01-14    12441    12442    12443    12444    12445    12446  ...
             2) the second element:  {<original index>: <row, col>}
         """
-        # object incase of pandas converting int to flaot
+        # object incase of pandas converting int to float
         idx_df = pd.Series(range(data.shape[0]), index=data.index, dtype=object)
         idx_df = lazy_sort_index(idx_df.unstack())
         # NOTE: the correctness of `__getitem__` depends on columns sorted here
@@ -560,8 +646,11 @@ class TSDatasetH(DatasetH):
     def _prepare_seg(self, slc: slice, **kwargs) -> TSDataSampler:
         """
         split the _prepare_raw_seg is to leave a hook for data preprocessing before creating processing data
+        NOTE: TSDatasetH only support slc segment on datetime !!!
         """
         dtype = kwargs.pop("dtype", None)
+        if not isinstance(slc, slice):
+            slc = slice(*slc)
         start, end = slc.start, slc.stop
         flt_col = kwargs.pop("flt_col", None)
         # TSDatasetH will retrieve more data for complete time-series
@@ -572,7 +661,7 @@ class TSDatasetH(DatasetH):
         flt_kwargs = deepcopy(kwargs)
         if flt_col is not None:
             flt_kwargs["col_set"] = flt_col
-            flt_data = self._prepare_seg(ext_slice, **flt_kwargs)
+            flt_data = super()._prepare_seg(ext_slice, **flt_kwargs)
             assert len(flt_data.columns) == 1
         else:
             flt_data = None

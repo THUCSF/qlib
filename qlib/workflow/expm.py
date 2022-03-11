@@ -6,9 +6,7 @@ import mlflow
 from filelock import FileLock
 from mlflow.exceptions import MlflowException, RESOURCE_ALREADY_EXISTS, ErrorCode
 from mlflow.entities import ViewType
-import os, logging
-from pathlib import Path
-from contextlib import contextmanager
+import os
 from typing import Optional, Text
 
 from .exp import MLflowExperiment, Experiment
@@ -17,7 +15,7 @@ from .recorder import Recorder
 from ..log import get_module_logger
 from ..utils.exceptions import ExpAlreadyExistError
 
-logger = get_module_logger("workflow", logging.INFO)
+logger = get_module_logger("workflow")
 
 
 class ExpManager:
@@ -105,7 +103,7 @@ class ExpManager:
     def search_records(self, experiment_ids=None, **kwargs):
         """
         Get a pandas DataFrame of records that fit the search criteria of the experiment.
-        Inputs are the search critera user want to apply.
+        Inputs are the search criteria user want to apply.
 
         Returns
         -------
@@ -178,7 +176,7 @@ class ExpManager:
                 self._get_exp(experiment_id=experiment_id, experiment_name=experiment_name),
                 False,
             )
-        if is_new and start:
+        if self.active_experiment is None and start:
             self.active_experiment = exp
             # start the recorder
             self.active_experiment.start()
@@ -203,7 +201,7 @@ class ExpManager:
             # So we supported it in the interface wrapper
             pr = urlparse(self.uri)
             if pr.scheme == "file":
-                with FileLock(os.path.join(pr.netloc, pr.path, "filelock")) as f:
+                with FileLock(os.path.join(pr.netloc, pr.path, "filelock")) as f:  # pylint: disable=E0110
                     return self.create_exp(experiment_name), True
             # NOTE: for other schemes like http, we double check to avoid create exp conflicts
             try:
@@ -279,8 +277,9 @@ class ExpManager:
 
         """
         if uri is None:
-            logger.info("No tracking URI is provided. Use the default tracking URI.")
-            self._current_uri = self.default_uri
+            if self._current_uri is None:
+                logger.debug("No tracking URI is provided. Use the default tracking URI.")
+                self._current_uri = self.default_uri
         else:
             # Temporarily re-set the current uri as the uri argument.
             self._current_uri = uri
@@ -290,6 +289,7 @@ class ExpManager:
     def _set_uri(self):
         """
         Customized features for subclasses' set_uri function.
+        This method is designed for the underlying experiment backend storage.
         """
         raise NotImplementedError(f"Please implement the `_set_uri` method.")
 
@@ -361,7 +361,7 @@ class MLflowExpManager(ExpManager):
             experiment_id = self.client.create_experiment(experiment_name)
         except MlflowException as e:
             if e.error_code == ErrorCode.Name(RESOURCE_ALREADY_EXISTS):
-                raise ExpAlreadyExistError()
+                raise ExpAlreadyExistError() from e
             raise e
 
         experiment = MLflowExperiment(experiment_id, experiment_name, self.uri)
@@ -385,10 +385,10 @@ class MLflowExpManager(ExpManager):
                     raise MlflowException("No valid experiment has been found.")
                 experiment = MLflowExperiment(exp.experiment_id, exp.name, self.uri)
                 return experiment
-            except MlflowException:
+            except MlflowException as e:
                 raise ValueError(
                     "No valid experiment has been found, please make sure the input experiment id is correct."
-                )
+                ) from e
         elif experiment_name is not None:
             try:
                 exp = self.client.get_experiment_by_name(experiment_name)
@@ -399,9 +399,9 @@ class MLflowExpManager(ExpManager):
             except MlflowException as e:
                 raise ValueError(
                     "No valid experiment has been found, please make sure the input experiment name is correct."
-                )
+                ) from e
 
-    def search_records(self, experiment_ids, **kwargs):
+    def search_records(self, experiment_ids=None, **kwargs):
         filter_string = "" if kwargs.get("filter_string") is None else kwargs.get("filter_string")
         run_view_type = 1 if kwargs.get("run_view_type") is None else kwargs.get("run_view_type")
         max_results = 100000 if kwargs.get("max_results") is None else kwargs.get("max_results")
@@ -423,7 +423,7 @@ class MLflowExpManager(ExpManager):
         except MlflowException as e:
             raise Exception(
                 f"Error: {e}. Something went wrong when deleting experiment. Please check if the name/id of the experiment is correct."
-            )
+            ) from e
 
     def list_experiments(self):
         # retrieve all the existing experiments

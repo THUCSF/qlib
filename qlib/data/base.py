@@ -7,12 +7,19 @@ from __future__ import print_function
 
 import abc
 import pandas as pd
-
 from ..log import get_module_logger
 
 
 class Expression(abc.ABC):
-    """Expression base class"""
+    """
+    Expression base class
+
+    Expression is designed to handle the calculation of data with the format below
+    data with two dimension for each instrument,
+    - feature
+    - time:  it  could be observation time or period time.
+        - period time is designed for Point-in-time database.  For example, the period time maybe 2014Q4, its value can observed for multiple times(different value may be observed at different time due to amendment).
+    """
 
     def __str__(self):
         return type(self).__name__
@@ -21,112 +28,122 @@ class Expression(abc.ABC):
         return str(self)
 
     def __gt__(self, other):
-        from .ops import Gt
+        from .ops import Gt  # pylint: disable=C0415
 
         return Gt(self, other)
 
     def __ge__(self, other):
-        from .ops import Ge
+        from .ops import Ge  # pylint: disable=C0415
 
         return Ge(self, other)
 
     def __lt__(self, other):
-        from .ops import Lt
+        from .ops import Lt  # pylint: disable=C0415
 
         return Lt(self, other)
 
     def __le__(self, other):
-        from .ops import Le
+        from .ops import Le  # pylint: disable=C0415
 
         return Le(self, other)
 
     def __eq__(self, other):
-        from .ops import Eq
+        from .ops import Eq  # pylint: disable=C0415
 
         return Eq(self, other)
 
     def __ne__(self, other):
-        from .ops import Ne
+        from .ops import Ne  # pylint: disable=C0415
 
         return Ne(self, other)
 
     def __add__(self, other):
-        from .ops import Add
+        from .ops import Add  # pylint: disable=C0415
 
         return Add(self, other)
 
     def __radd__(self, other):
-        from .ops import Add
+        from .ops import Add  # pylint: disable=C0415
 
         return Add(other, self)
 
     def __sub__(self, other):
-        from .ops import Sub
+        from .ops import Sub  # pylint: disable=C0415
 
         return Sub(self, other)
 
     def __rsub__(self, other):
-        from .ops import Sub
+        from .ops import Sub  # pylint: disable=C0415
 
         return Sub(other, self)
 
     def __mul__(self, other):
-        from .ops import Mul
+        from .ops import Mul  # pylint: disable=C0415
 
         return Mul(self, other)
 
     def __rmul__(self, other):
-        from .ops import Mul
+        from .ops import Mul  # pylint: disable=C0415
 
         return Mul(self, other)
 
     def __div__(self, other):
-        from .ops import Div
+        from .ops import Div  # pylint: disable=C0415
 
         return Div(self, other)
 
     def __rdiv__(self, other):
-        from .ops import Div
+        from .ops import Div  # pylint: disable=C0415
 
         return Div(other, self)
 
     def __truediv__(self, other):
-        from .ops import Div
+        from .ops import Div  # pylint: disable=C0415
 
         return Div(self, other)
 
     def __rtruediv__(self, other):
-        from .ops import Div
+        from .ops import Div  # pylint: disable=C0415
 
         return Div(other, self)
 
     def __pow__(self, other):
-        from .ops import Power
+        from .ops import Power  # pylint: disable=C0415
 
         return Power(self, other)
 
     def __and__(self, other):
-        from .ops import And
+        from .ops import And  # pylint: disable=C0415
 
         return And(self, other)
 
     def __rand__(self, other):
-        from .ops import And
+        from .ops import And  # pylint: disable=C0415
 
         return And(other, self)
 
     def __or__(self, other):
-        from .ops import Or
+        from .ops import Or  # pylint: disable=C0415
 
         return Or(self, other)
 
     def __ror__(self, other):
-        from .ops import Or
+        from .ops import Or  # pylint: disable=C0415
 
         return Or(other, self)
 
-    def load(self, instrument, start_index, end_index, freq):
+    def load(self, instrument, start_index, end_index, *args):
         """load  feature
+        This function is responsible for loading feature/expression based on the expression engine.
+
+        The concerate implementation will be seperated by two parts
+        1) caching data, handle errors.
+            - This part is shared by all the expressions and implemented in Expression
+        2) processing and calculating data based on the specific expression.
+            - This part is different in each expression and implemented in each expression
+
+        Expresion Engine is shared by different data.
+        Different data will have different extra infomation for `args`.
 
         Parameters
         ----------
@@ -136,37 +153,44 @@ class Expression(abc.ABC):
             feature start index [in calendar].
         end_index : str
             feature end  index  [in calendar].
-        freq : str
-            feature frequency.
+
+        *args may contains following information;
+        1) if it is used in basic experssion engine data, it contains following arguments
+            freq : str
+                feature frequency.
+
+        2) if is used in PIT data, it contains following arguments
+            cur_pit:
+                it is designed for the point-in-time data.
 
         Returns
         ----------
         pd.Series
             feature series: The index of the series is the calendar index
         """
-        from .cache import H
+        from .cache import H  # pylint: disable=C0415
 
         # cache
-        args = str(self), instrument, start_index, end_index, freq
-        if args in H["f"]:
-            return H["f"][args]
-        if start_index is None or end_index is None or start_index > end_index:
+        cache_key = str(self), instrument, start_index, end_index, *args
+        if cache_key in H["f"]:
+            return H["f"][cache_key]
+        if start_index is not None and end_index is not None and start_index > end_index:
             raise ValueError("Invalid index range: {} {}".format(start_index, end_index))
         try:
-            series = self._load_internal(instrument, start_index, end_index, freq)
+            series = self._load_internal(instrument, start_index, end_index, *args)
         except Exception as e:
-            get_module_logger("data").error(
+            get_module_logger("data").debug(
                 f"Loading data error: instrument={instrument}, expression={str(self)}, "
-                f"start_index={start_index}, end_index={end_index}, freq={freq}. "
+                f"start_index={start_index}, end_index={end_index}, args={args}. "
                 f"error info: {str(e)}"
             )
             raise
         series.name = str(self)
-        H["f"][args] = series
+        H["f"][cache_key] = series
         return series
 
     @abc.abstractmethod
-    def _load_internal(self, instrument, start_index, end_index, freq):
+    def _load_internal(self, instrument, start_index, end_index, *args) -> pd.Series:
         raise NotImplementedError("This function must be implemented in your newly defined feature")
 
     @abc.abstractmethod
@@ -215,7 +239,7 @@ class Feature(Expression):
 
     def _load_internal(self, instrument, start_index, end_index, freq):
         # load
-        from .data import FeatureD
+        from .data import FeatureD  # pylint: disable=C0415
 
         return FeatureD.feature(instrument, str(self), start_index, end_index, freq)
 
@@ -226,11 +250,19 @@ class Feature(Expression):
         return 0, 0
 
 
+class PFeature(Feature):
+    def __str__(self):
+        return "$$" + self._name
+
+    def _load_internal(self, instrument, start_index, end_index, cur_time):
+        from .data import PITD  # pylint: disable=C0415
+
+        return PITD.period_feature(instrument, str(self), start_index, end_index, cur_time)
+
+
 class ExpressionOps(Expression):
     """Operator Expression
 
     This kind of feature will use operator for feature
     construction on the fly.
     """
-
-    pass

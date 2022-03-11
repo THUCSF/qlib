@@ -2,8 +2,6 @@
 # Licensed under the MIT License.
 
 
-import copy
-import pathlib
 from typing import Dict, List, Union
 
 import pandas as pd
@@ -20,7 +18,7 @@ class BasePosition:
     Please refer to the `Position` class for the position
     """
 
-    def __init__(self, cash=0.0, *args, **kwargs):
+    def __init__(self, *args, cash=0.0, **kwargs):
         self._settle_type = self.ST_NO
 
     def skip_update(self) -> bool:
@@ -152,7 +150,7 @@ class BasePosition:
         """
         generate stock weight dict {stock_id : value weight of stock in the position}
         it is meaningful in the beginning or the end of each trade step
-        - During execution of each trading step, the weight may be not consistant with the portfolio value
+        - During execution of each trading step, the weight may be not consistent with the portfolio value
 
         Parameters
         ----------
@@ -222,6 +220,12 @@ class BasePosition:
             please refer to the documents of Executor
         """
         raise NotImplementedError(f"Please implement the `settle_commit` method")
+
+    def __str__(self):
+        return self.__dict__.__str__()
+
+    def __repr__(self):
+        return self.__dict__.__repr__()
 
 
 class Position(BasePosition):
@@ -356,7 +360,9 @@ class Position(BasePosition):
                 # check if to delete
                 if self.position[stock_id]["amount"] < -1e-5:
                     raise ValueError(
-                        "only have {} {}, require {}".format(self.position[stock_id]["amount"], stock_id, trade_amount)
+                        "only have {} {}, require {}".format(
+                            self.position[stock_id]["amount"] + trade_amount, stock_id, trade_amount
+                        )
                     )
 
         new_cash = trade_val - cost
@@ -532,7 +538,7 @@ class InfPosition(BasePosition):
     def get_stock_amount_dict(self) -> Dict:
         raise NotImplementedError(f"InfPosition doesn't support get_stock_amount_dict")
 
-    def get_stock_weight_dict(self, only_stock: bool) -> Dict:
+    def get_stock_weight_dict(self, only_stock: bool = False) -> Dict:
         raise NotImplementedError(f"InfPosition doesn't support get_stock_weight_dict")
 
     def add_count_all(self, bar):

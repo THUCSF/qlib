@@ -171,8 +171,8 @@ def get_strategy_executor(
     # NOTE:
     # - for avoiding recursive import
     # - typing annotations is not reliable
-    from ..strategy.base import BaseStrategy
-    from .executor import BaseExecutor
+    from ..strategy.base import BaseStrategy  # pylint: disable=C0415
+    from .executor import BaseExecutor  # pylint: disable=C0415
 
     trade_account = create_account_instance(
         start_time=start_time, end_time=end_time, benchmark=benchmark, account=account, pos_type=pos_type
@@ -186,8 +186,10 @@ def get_strategy_executor(
     trade_exchange = get_exchange(**exchange_kwargs)
 
     common_infra = CommonInfrastructure(trade_account=trade_account, trade_exchange=trade_exchange)
-    trade_strategy = init_instance_by_config(strategy, accept_types=BaseStrategy, common_infra=common_infra)
-    trade_executor = init_instance_by_config(executor, accept_types=BaseExecutor, common_infra=common_infra)
+    trade_strategy = init_instance_by_config(strategy, accept_types=BaseStrategy)
+    trade_strategy.reset_common_infra(common_infra)
+    trade_executor = init_instance_by_config(executor, accept_types=BaseExecutor)
+    trade_executor.reset_common_infra(common_infra)
 
     return trade_strategy, trade_executor
 

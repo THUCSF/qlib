@@ -6,12 +6,8 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from qlib.backtest.exchange import Exchange
     from qlib.backtest.position import BasePosition
-from typing import List, Tuple, Union
-import pandas as pd
+from typing import Tuple, Union
 
-from ..model.base import BaseModel
-from ..data.dataset import DatasetH
-from ..data.dataset.utils import convert_index_format
 from ..rl.interpreter import ActionInterpreter, StateInterpreter
 from ..utils import init_instance_by_config
 from ..backtest.utils import CommonInfrastructure, LevelInfrastructure, TradeCalendarManager
@@ -34,7 +30,7 @@ class BaseStrategy:
         Parameters
         ----------
         outer_trade_decision : BaseTradeDecision, optional
-            the trade decision of outer strategy which this startegy relies, and it will be traded in [start_time, end_time], by default None
+            the trade decision of outer strategy which this strategy relies, and it will be traded in [start_time, end_time], by default None
             - If the strategy is used to split trade decision, it will be used
             - If the strategy is used for portfolio management, it can be ignored
         level_infra : LevelInfrastructure, optional
@@ -232,9 +228,9 @@ class RLIntStrategy(RLStrategy):
         Parameters
         ----------
         state_interpreter : Union[dict, StateInterpreter]
-            interpretor that interprets the qlib execute result into rl env state
+            interpreter that interprets the qlib execute result into rl env state
         action_interpreter : Union[dict, ActionInterpreter]
-            interpretor that interprets the rl agent action into qlib order list
+            interpreter that interprets the rl agent action into qlib order list
         start_time : Union[str, pd.Timestamp], optional
             start time of trading, by default None
         end_time : Union[str, pd.Timestamp], optional

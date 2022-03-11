@@ -5,9 +5,7 @@ from ...data.dataset.handler import DataHandlerLP
 from ...data.dataset.processor import Processor
 from ...utils import get_callable_kwargs
 from ...data.dataset import processor as processor_module
-from ...log import TimeInspector
 from inspect import getfullargspec
-import copy
 
 
 def check_transform_proc(proc_l, fit_start_time, fit_end_time):
@@ -90,7 +88,13 @@ class Alpha360(DataHandlerLP):
         return (["Ref($close, -2)/Ref($close, -1) - 1"], ["LABEL0"])
 
     def get_feature_config(self):
-
+        # NOTE:
+        # Alpha360 tries to provide a dataset with original price data
+        # the original price data includes the prices and volume in the last 60 days.
+        # To make it easier to learn models from this dataset, all the prices and volume
+        # are normalized by the latest price and volume data ( dividing by $close, $volume)
+        # So the latest normalized $close will be 1 (with name CLOSE0), the latest normalized $volume will be 1 (with name VOLUME0)
+        # If further normalization are executed (e.g. centralization),  CLOSE0 and VOLUME0 will be 0.
         fields = []
         names = []
 
@@ -120,9 +124,9 @@ class Alpha360(DataHandlerLP):
         fields += ["$vwap/$close"]
         names += ["VWAP0"]
         for i in range(59, 0, -1):
-            fields += ["Ref($volume, %d)/$volume" % (i)]
+            fields += ["Ref($volume, %d)/($volume+1e-12)" % (i)]
             names += ["VOLUME%d" % (i)]
-        fields += ["$volume/$volume"]
+        fields += ["$volume/($volume+1e-12)"]
         names += ["VOLUME0"]
 
         return fields, names
@@ -243,7 +247,7 @@ class Alpha158(DataHandlerLP):
                 names += [field.upper() + str(d) for d in windows]
         if "volume" in config:
             windows = config["volume"].get("windows", range(5))
-            fields += ["Ref($volume, %d)/$volume" % d if d != 0 else "$volume/$volume" for d in windows]
+            fields += ["Ref($volume, %d)/($volume+1e-12)" % d if d != 0 else "$volume/($volume+1e-12)" for d in windows]
             names += ["VOLUME" + str(d) for d in windows]
         if "rolling" in config:
             windows = config["rolling"].get("windows", [5, 10, 20, 30, 60])

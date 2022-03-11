@@ -4,18 +4,21 @@ This page lists a batch of methods designed for alpha seeking. Each method tries
 The alpha is evaluated in two ways.
 1. The correlation between the alpha and future return.
 1. Constructing portfolio based on the alpha and evaluating the final total return.
+   - The explanation of metrics can be found [here](https://qlib.readthedocs.io/en/latest/component/report.html#id4)
 
 Here are the results of each benchmark model running on Qlib's `Alpha360` and `Alpha158` dataset with China's A shared-stock & CSI300 data respectively. The values of each metric are the mean and std calculated based on 20 runs with different random seeds.
 
 The numbers shown below demonstrate the performance of the entire `workflow` of each model. We will update the `workflow` as well as models in the near future for better results.
 <!-- 
-> If you need to reproduce the results below, please use the **v1** dataset: `python scripts/get_data.py qlib_data --target_dir ~/.qlib/qlib_data/qlib_cn_1d --region cn --version v1`
+> If you need to reproduce the results below, please use the **v1** dataset: `python scripts/get_data.py qlib_data --target_dir ~/.qlib/qlib_data/cn_data --region cn --version v1`
 >
 > In the new version of qlib, the default dataset is **v2**. Since the data is collected from the YahooFinance API (which is not very stable), the results of *v2* and *v1* may differ -->
 
 > NOTE:
 > The backtest start from 0.8.0 is quite different from previous version. Please check out the changelog for the difference.
 
+> NOTE:
+> We have very limited resources to implement and finetune the models. We tried our best effort to fairly compare these models.  But some models may have greater potential than what it looks like in the table below.  Your contribution is highly welcomed to explore their potential.
 
 ## Alpha158 dataset
 
@@ -66,3 +69,9 @@ The numbers shown below demonstrate the performance of the entire `workflow` of 
 - The selected 20 features are based on the feature importance of a lightgbm-based model.
 - The base model of DoubleEnsemble is LGBM.
 - The base model of TCTS is GRU.
+- About the datasets
+  - Alpha158 is a tabular dataset. There are less spatial relationships between different features. Each feature are carefully desgined by human (a.k.a feature engineering)
+  - Alpha360 contains raw price and volue data without much feature engineering. There are strong strong spatial relationships between the features in the time dimension.
+- The metrics can be categorized into two
+   - Signal-based evaluation:  IC, ICIR, Rank IC, Rank ICIR
+   - Portfolio-based metrics:  Annualized Return, Information Ratio, Max Drawdown

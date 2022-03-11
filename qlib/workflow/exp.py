@@ -1,11 +1,11 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-from typing import Union
-import mlflow, logging
+from typing import Dict, List, Union
+import mlflow
+import logging
 from mlflow.entities import ViewType
 from mlflow.exceptions import MlflowException
-from pathlib import Path
 from .recorder import Recorder, MLflowRecorder
 from ..log import get_module_logger
 
@@ -22,6 +22,7 @@ class Experiment:
         self.id = id
         self.name = name
         self.active_recorder = None  # only one recorder can running each time
+        self._default_rec_name = "abstract_recorder"
 
     def __repr__(self):
         return "{name}(id={id}, info={info})".format(name=self.__class__.__name__, id=self.id, info=self.info)
@@ -88,7 +89,7 @@ class Experiment:
     def search_records(self, **kwargs):
         """
         Get a pandas DataFrame of records that fit the search criteria of the experiment.
-        Inputs are the search critera user want to apply.
+        Inputs are the search criteria user want to apply.
 
         Returns
         -------
@@ -150,7 +151,7 @@ class Experiment:
         create : boolean
             create the recorder if it hasn't been created before.
         start : boolean
-            start the new recorder if one is created.
+            start the new recorder if one is **created**.
 
         Returns
         -------
@@ -214,7 +215,10 @@ class Experiment:
         """
         raise NotImplementedError(f"Please implement the `_get_recorder` method")
 
-    def list_recorders(self, **flt_kwargs):
+    RT_D = "dict"  # return type dict
+    RT_L = "list"  # return type list
+
+    def list_recorders(self, rtype: str = RT_D, **flt_kwargs) -> Union[List[Recorder], Dict[str, Recorder]]:
         """
         List all the existing recorders of this experiment. Please first get the experiment instance before calling this method.
         If user want to use the method `R.list_recorders()`, please refer to the related API document in `QlibRecorder`.
@@ -225,7 +229,11 @@ class Experiment:
 
         Returns
         -------
-        A dictionary (id -> recorder) of recorder information that being stored.
+        The return type depent on `rtype`
+            if `rtype` == "dict":
+                A dictionary (id -> recorder) of recorder information that being stored.
+            elif `rtype` == "list":
+                A list of Recorder.
         """
         raise NotImplementedError(f"Please implement the `list_recorders` method.")
 
@@ -263,7 +271,7 @@ class MLflowExperiment(Experiment):
 
         return self.active_recorder
 
-    def end(self, recorder_status):
+    def end(self, recorder_status=Recorder.STATUS_S):
         if self.active_recorder is not None:
             self.active_recorder.end_run(recorder_status)
             self.active_recorder = None
@@ -279,6 +287,9 @@ class MLflowExperiment(Experiment):
         """
         Method for getting or creating a recorder. It will try to first get a valid recorder, if exception occurs, it will
         raise errors.
+
+        Quoting docs of search_runs from MLflow
+        > The default ordering is to sort by start_time DESC, then run_id.
         """
         assert (
             recorder_id is not None or recorder_name is not None
@@ -288,8 +299,10 @@ class MLflowExperiment(Experiment):
                 run = self._client.get_run(recorder_id)
                 recorder = MLflowRecorder(self.id, self._uri, mlflow_run=run)
                 return recorder
-            except MlflowException:
-                raise ValueError("No valid recorder has been found, please make sure the input recorder id is correct.")
+            except MlflowException as mlflow_exp:
+                raise ValueError(
+                    "No valid recorder has been found, please make sure the input recorder id is correct."
+                ) from mlflow_exp
         elif recorder_name is not None:
             logger.warning(
                 f"Please make sure the recorder name {recorder_name} is unique, we will only return the latest recorder if there exist several matched the given name."
@@ -321,12 +334,21 @@ class MLflowExperiment(Experiment):
         except MlflowException as e:
             raise Exception(
                 f"Error: {e}. Something went wrong when deleting recorder. Please check if the name/id of the recorder is correct."
-            )
+            ) from e
 
     UNLIMITED = 50000  # FIXME: Mlflow can only list 50000 records at most!!!!!!!
 
-    def list_recorders(self, max_results: int = UNLIMITED, status: Union[str, None] = None, filter_string: str = ""):
+    def list_recorders(
+        self,
+        rtype=Experiment.RT_D,
+        max_results: int = UNLIMITED,
+        status: Union[str, None] = None,
+        filter_string: str = "",
+    ):
         """
+        Quoting docs of search_runs
+        > The default ordering is to sort by start_time DESC, then run_id.
+
         Parameters
         ----------
         max_results : int
@@ -340,10 +362,17 @@ class MLflowExperiment(Experiment):
         runs = self._client.search_runs(
             self.id, run_view_type=ViewType.ACTIVE_ONLY, max_results=max_results, filter_string=filter_string
         )
-        recorders = dict()
-        for i in range(len(runs)):
-            recorder = MLflowRecorder(self.id, self._uri, mlflow_run=runs[i])
+        rids = []
+        recorders = []
+        for i, n in enumerate(runs):
+            recorder = MLflowRecorder(self.id, self._uri, mlflow_run=n)
             if status is None or recorder.status == status:
-                recorders[runs[i].info.run_id] = recorder
+                rids.append(n.info.run_id)
+                recorders.append(recorder)
 
-        return recorders
+        if rtype == Experiment.RT_D:
+            return dict(zip(rids, recorders))
+        elif rtype == Experiment.RT_L:
+            return recorders
+        else:
+            raise NotImplementedError(f"This type of input is not supported")

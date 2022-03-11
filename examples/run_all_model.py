@@ -20,7 +20,6 @@ from operator import xor
 from pprint import pprint
 
 import qlib
-from qlib.config import REG_CN
 from qlib.workflow import R
 from qlib.tests.data import GetData
 
@@ -187,7 +186,7 @@ def gen_and_save_md_table(metrics, dataset):
 # read yaml, remove seed kwargs of model, and then save file in the temp_dir
 def gen_yaml_file_without_seed_kwargs(yaml_path, temp_dir):
     with open(yaml_path, "r") as fp:
-        config = yaml.load(fp)
+        config = yaml.safe_load(fp)
     try:
         del config["task"]["model"]["kwargs"]["seed"]
     except KeyError:
@@ -248,7 +247,7 @@ class ModelRunner:
             determines the dataset to be used for each model.
         qlib_uri : str
             the uri to install qlib with pip
-            it could be url on the we or local path
+            it could be url on the we or local path (NOTE: the local path must be a absolute path)
         exp_folder_name: str
             the name of the experiment folder
         wait_before_rm_env : bool

@@ -13,7 +13,7 @@ import requests
 import pandas as pd
 from loguru import logger
 from dateutil.tz import tzlocal
-from qlib.config import REG_CN as REGION_CN
+from qlib.constant import REG_CN as REGION_CN
 
 CUR_DIR = Path(__file__).resolve().parent
 sys.path.append(str(CUR_DIR.parent.parent))
@@ -103,7 +103,7 @@ class FundCollector(BaseCollector):
         error_msg = f"{symbol}-{interval}-{start}-{end}"
 
         try:
-            # TODO: numberOfHistoricalDaysToCrawl should be bigger enouhg
+            # TODO: numberOfHistoricalDaysToCrawl should be bigger enough
             url = INDEX_BENCH_URL.format(
                 index_code=symbol, numberOfHistoricalDaysToCrawl=10000, startDate=start, endDate=end
             )
@@ -253,7 +253,6 @@ class Run(BaseRun):
         delay=0,
         start=None,
         end=None,
-        interval="1d",
         check_data_length: int = None,
         limit_nums=None,
     ):
@@ -279,10 +278,10 @@ class Run(BaseRun):
         Examples
         ---------
             # get daily data
-            $ python collector.py download_data --source_dir ~/.qlib/fund_data/source/cn_1d --region CN --start 2020-11-01 --end 2020-11-10 --delay 0.1 --interval 1d
+            $ python collector.py download_data --source_dir ~/.qlib/fund_data/source/cn_data --region CN --start 2020-11-01 --end 2020-11-10 --delay 0.1 --interval 1d
         """
 
-        super(Run, self).download_data(max_collector_count, delay, start, end, interval, check_data_length, limit_nums)
+        super(Run, self).download_data(max_collector_count, delay, start, end, check_data_length, limit_nums)
 
     def normalize_data(self, date_field_name: str = "date", symbol_field_name: str = "symbol"):
         """normalize data
@@ -296,7 +295,7 @@ class Run(BaseRun):
 
         Examples
         ---------
-            $ python collector.py normalize_data --source_dir ~/.qlib/fund_data/source/cn_1d --normalize_dir ~/.qlib/fund_data/source/cn_1d_nor --region CN --interval 1d --date_field_name FSRQ
+            $ python collector.py normalize_data --source_dir ~/.qlib/fund_data/source/cn_data --normalize_dir ~/.qlib/fund_data/source/cn_1d_nor --region CN --interval 1d --date_field_name FSRQ
         """
         super(Run, self).normalize_data(date_field_name, symbol_field_name)
 
