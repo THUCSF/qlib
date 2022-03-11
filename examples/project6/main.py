@@ -192,7 +192,7 @@ if __name__ == "__main__":
                 check_on_train_epoch_end=True,
                 stopping_threshold=5e-6)
     trainer = pl.Trainer(
-        max_epochs=100,
+        max_epochs=args.n_epoch,
         gpus=1,
         gradient_clip_val=1,
         progress_bar_refresh_rate=1,
@@ -223,8 +223,8 @@ if __name__ == "__main__":
     test_signal.index.set_names(["instrument", "datetime"], inplace=True)
     test_gt = test_ds.df[test_ds.target_names].values[test_indice]
     test_gt = test_gt[mask].squeeze()
-    final_res, _, _, month_res = lib.backtest_signal(test_signal, args)
-    
+    report, final_res, _, _, month_res = lib.backtest_signal(test_signal, args)
+
     train_scores, _, _, train_indice = predict_dataset(
         learner.model, train_ds)
     train_gt = train_ds.df[train_ds.target_names].values
@@ -237,6 +237,8 @@ if __name__ == "__main__":
             "ERC": float(final_res['ERC'].risk['annualized_return'])
         }, "benchmark": {
             "R": float(final_res['benchmark'].risk['annualized_return']),
+        }, "monthly": {
+            
         }}
     config = {
         "learner_config": task["learner"],

@@ -125,7 +125,7 @@ def backtest_signal(signal, args):
     #keys = ['mean', 'std', 'annualized_return', 'max_drawdown']
     #items = ['excess_return_with_cost', 'excess_return_without_cost']
 
-    return res, portfolio_metric_dict, indicator_dict, month_res
+    return report_normal, res, portfolio_metric_dict, indicator_dict, month_res
 
 
 def assign_5label(x):
