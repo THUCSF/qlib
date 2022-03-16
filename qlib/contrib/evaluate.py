@@ -24,6 +24,58 @@ from ..data.dataset.utils import get_level_index
 logger = get_module_logger("Evaluate")
 
 
+def my_risk_analysis(r, N: int = None, freq: str = "day"):
+    """Risk Analysis
+
+    Parameters
+    ----------
+    r : pandas.Series
+        daily return series.
+    N: int
+        scaler for annualizing information_ratio (day: 252, week: 50, month: 12), at least one of `N` and `freq` should exist
+    freq: str
+        analysis frequency used for calculating the scaler, at least one of `N` and `freq` should exist
+    """
+
+    def cal_risk_analysis_scaler(freq):
+        _count, _freq = Freq.parse(freq)
+        # len(D.calendar(start_time='2010-01-01', end_time='2019-12-31', freq='day')) = 2384
+        _freq_scaler = {
+            Freq.NORM_FREQ_MINUTE: 240 * 238,
+            Freq.NORM_FREQ_DAY: 238,
+            Freq.NORM_FREQ_WEEK: 50,
+            Freq.NORM_FREQ_MONTH: 12,
+        }
+        return _freq_scaler[_freq] / _count
+
+    if N is None and freq is None:
+        raise ValueError("at least one of `N` and `freq` should exist")
+    if N is not None and freq is not None:
+        warnings.warn("risk_analysis freq will be ignored")
+    if N is None:
+        N = cal_risk_analysis_scaler(freq)
+
+    cum_ret = (1 + r).cumprod()
+    cum_ret_max = cum_ret.cummax()
+    total_return = cum_ret[-1] - 1
+    annualized_return = np.power(total_return + 1,
+                            float(N) / r.shape[0]) - 1
+    mean = r.mean()
+    std = r.std(ddof=1)
+    information_ratio = mean / std * np.sqrt(N)
+    max_drawdown = ((cum_ret - cum_ret_max) / cum_ret_max).min()
+    data = {
+        "mean": mean,
+        "std": std,
+        "total_return": total_return,
+        "annualized_return": annualized_return,
+        "information_ratio": information_ratio,
+        "max_drawdown": max_drawdown,
+    }
+    res = pd.Series(data).to_frame("risk")
+    return res
+
+
 def risk_analysis(r, N: int = None, freq: str = "day"):
     """Risk Analysis
 

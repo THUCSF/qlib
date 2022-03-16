@@ -84,7 +84,7 @@ class TopkDropoutStrategy(BaseSignalStrategy):
         method_sell="bottom",
         method_buy="top",
         hold_thresh=1,
-        only_tradable=False,
+        only_tradable=True,
         **kwargs,
     ):
         """
@@ -157,7 +157,7 @@ class TopkDropoutStrategy(BaseSignalStrategy):
                 ]
 
         else:
-            # Otherwise, the stock will make decision with out the stock tradable info
+            # Otherwise, the stock will make decision without the stock tradable info
             def get_first_n(l, n):
                 return list(l)[:n]
 
@@ -249,7 +249,6 @@ class TopkDropoutStrategy(BaseSignalStrategy):
         # note the current has been changed
         current_stock_list = current_temp.get_stock_list()
         value = cash * self.risk_degree / len(buy) if len(buy) > 0 else 0
-
         # open_cost should be considered in the real trading environment, while the backtest in evaluate.py does not
         # consider it as the aim of demo is to accomplish same strategy as evaluate.py, so comment out this line
         # value = value / (1+self.trade_exchange.open_cost) # set open_cost limit

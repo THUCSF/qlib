@@ -7,7 +7,7 @@ import pandas as pd
 
 import plotly.graph_objs as py
 
-from ...evaluate import risk_analysis
+from ...evaluate import my_risk_analysis
 
 from ..graph import SubplotsGraph, ScatterGraph
 
@@ -32,8 +32,10 @@ def _get_risk_analysis_data_with_report(
     #     analysis["pred_long_short"] = risk_analysis(report_long_short_df["long_short"])
 
     if not report_normal_df.empty:
-        analysis["excess_return_without_cost"] = risk_analysis(report_normal_df["return"] - report_normal_df["bench"])
-        analysis["excess_return_with_cost"] = risk_analysis(
+        analysis["return"] = my_risk_analysis(report_normal_df["return"])
+        analysis["bench_return"] = my_risk_analysis(report_normal_df["bench"])
+        analysis["excess_return_without_cost"] = my_risk_analysis(report_normal_df["return"] - report_normal_df["bench"])
+        analysis["excess_return_with_cost"] = my_risk_analysis(
             report_normal_df["return"] - report_normal_df["bench"] - report_normal_df["cost"]
         )
     analysis_df = pd.concat(analysis)  # type: pd.DataFrame
@@ -140,7 +142,7 @@ def get_monthly_return(report_normal_df: pd.DataFrame):
 
     #for _feature in ["annualized_return", "max_drawdown", "information_ratio", "std"]:
     return _get_monthly_analysis_with_feature(
-        _monthly_df, "annualized_return")
+        _monthly_df, "total_return")
 
 
 def _get_monthly_risk_analysis_figure(report_normal_df: pd.DataFrame) -> Iterable[py.Figure]:

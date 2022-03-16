@@ -380,6 +380,7 @@ class Exchange:
         if self.check_order(order) is False:
             order.deal_amount = 0.0
             # using np.nan instead of None to make it more convenient to should the value in format string
+            #print(f"Order failed due to trading limitation: {order}")
             self.logger.debug(f"Order failed due to trading limitation: {order}")
             return 0.0, 0.0, np.nan
 
@@ -693,6 +694,7 @@ class Exchange:
         orig_deal_amount = order.deal_amount
         order.deal_amount = max(min(vol_limit_min, orig_deal_amount), 0)
         if vol_limit_min < orig_deal_amount:
+            #print(f"Order clipped due to volume limitation: {order}, {list(zip(vol_limit_num, vol_limit))}")
             self.logger.debug(f"Order clipped due to volume limitation: {order}, {list(zip(vol_limit_num, vol_limit))}")
 
     def _get_buy_amount_by_cash_limit(self, trade_price, cash, cost_ratio):
@@ -738,6 +740,7 @@ class Exchange:
         # Another choice is placing it after rounding the order
         # - It simulates that the large order is submitted, but partial is dealt regardless of rounding by trading unit.
         self._clip_amount_by_volume(order, dealt_order_amount)
+        
 
         # TODO: the adjusted cost ratio can be overestimated as deal_amount will be clipped in the next steps
         trade_val = order.deal_amount * trade_price
@@ -768,6 +771,7 @@ class Exchange:
                     self.min_cost,
                 ):
                     order.deal_amount = 0
+                    #print(f"Order clipped due to cash limitation: {order}")
                     self.logger.debug(f"Order clipped due to cash limitation: {order}")
 
         elif order.direction == Order.BUY:
@@ -779,6 +783,7 @@ class Exchange:
                 if cash < max(trade_val * cost_ratio, self.min_cost):
                     # cash cannot cover cost
                     order.deal_amount = 0
+                    #print(f"Order clipped due to cost higher than cash: {order}")
                     self.logger.debug(f"Order clipped due to cost higher than cash: {order}")
                 elif cash < trade_val + max(trade_val * cost_ratio, self.min_cost):
                     # The money is not enough
