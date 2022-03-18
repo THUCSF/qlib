@@ -1,1 +1,1 @@
-project 7: rolling-based training and evaluation
+project 7: Aligned data

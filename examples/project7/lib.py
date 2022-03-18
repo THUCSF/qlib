@@ -5,10 +5,11 @@ import os
 import numpy as np
 import pandas as pd
 
-from qlib.contrib.evaluate import risk_analysis
+from qlib.contrib.evaluate import my_risk_analysis
 from qlib.backtest import backtest
 from qlib.backtest.signal import ModelSignal, SignalWCache
 from qlib.contrib.report.analysis_position.risk_analysis import get_monthly_return
+
 
 def set_cuda_devices(device_ids, use_cuda=True):
     """Sets visible CUDA devices.
@@ -45,31 +46,6 @@ def torch2numpy(x):
     return x.detach().cpu().numpy()
 
 
-def simple_backtest(model, dataset, args):
-    """backtest and analysis
-    Returns:
-      res: The return dictionary.
-      portfolio_metric_dict, indicator_dict: The raw results.
-    """
-    port_analysis_config = get_eval_config(model, dataset, args)
-    portfolio_metric_dict, indicator_dict = backtest(
-        executor=port_analysis_config["executor"],
-        strategy=port_analysis_config["strategy"],
-        **port_analysis_config["backtest"])
-    res = {}
-    for _freq, (report_normal, positions_normal) in portfolio_metric_dict.items():
-        res["ER"] = risk_analysis(
-            report_normal["return"] - report_normal["bench"], freq=_freq)
-        res["ERC"] = risk_analysis(
-            report_normal["return"] - report_normal["bench"] - report_normal["cost"], freq=_freq)
-        res["benchmark"] = risk_analysis(report_normal["bench"], freq=_freq)
-
-    keys = ['mean', 'std', 'annualized_return', 'max_drawdown']
-    items = ['excess_return_with_cost', 'excess_return_without_cost']
-
-    return res, portfolio_metric_dict, indicator_dict
-
-
 def backtest_signal(signal, args):
     """Directly test on predicted signals.
     Args:
@@ -80,6 +56,7 @@ def backtest_signal(signal, args):
             "class": "SimulatorExecutor",
             "module_path": "qlib.backtest.executor",
             "kwargs": {
+                "verbose": False,
                 "time_per_step": "day",
                 "generate_portfolio_metrics": True,
             },
@@ -88,8 +65,8 @@ def backtest_signal(signal, args):
             "class": "TopkDropoutStrategy",
             "module_path": "qlib.contrib.strategy.signal_strategy",
             "kwargs": {
-                "topk": 50,
-                "n_drop": 5,
+                "topk": args.top_k,
+                "n_drop": args.n_drop,
                 "signal": SignalWCache(signal)
             },
         },
@@ -115,11 +92,11 @@ def backtest_signal(signal, args):
         **port_analysis_config["backtest"])
     res = {}
     for _freq, (report_normal, positions_normal) in portfolio_metric_dict.items():
-        res["ER"] = risk_analysis(
+        res["ER"] = my_risk_analysis(
             report_normal["return"] - report_normal["bench"], freq=_freq)
-        res["ERC"] = risk_analysis(
+        res["ERC"] = my_risk_analysis(
             report_normal["return"] - report_normal["bench"] - report_normal["cost"], freq=_freq)
-        res["benchmark"] = risk_analysis(report_normal["bench"], freq=_freq)
+        res["benchmark"] = my_risk_analysis(report_normal["bench"], freq=_freq)
         month_res = get_monthly_return(report_normal)
 
     #keys = ['mean', 'std', 'annualized_return', 'max_drawdown']
@@ -219,7 +196,7 @@ def get_train_config(args):
         input_size = 5
 
     if args.loss_type == "br":
-        output_dim = 2  # regress with bayesian
+        output_dim = 2 # regress with bayesian
     elif args.loss_type == "cls":
         output_dim = 5  # 5 class for price change
     elif args.loss_type == "rgr" or args.loss_type == "mae":
@@ -230,7 +207,7 @@ def get_train_config(args):
             "class": "RNN",
             "module_path": "qlib.contrib.model.rnn",
             "kwargs": {
-                "type": "LSTM",
+                "core_type": "LSTM",
                 "input_size": input_size,
                 "output_size": output_dim,
                 "hidden_size": args.hidden_size,
@@ -243,7 +220,7 @@ def get_train_config(args):
             "module_path": "qlib.contrib.model.rnn",
             "kwargs": {
                 "loss_type": args.loss_type,
-                "lr": 0.002,
+                "lr": 0.001,
                 "n_epoch": args.n_epoch,
                 "early_stop_patience": args.n_epoch,  # no early stopping
                 "eval_n_epoch": 20,
@@ -263,43 +240,6 @@ def get_train_config(args):
         },
     }
     return task
-
-
-def get_eval_config(model, dataset, args):
-    port_analysis_config = {
-        "executor": {
-            "class": "SimulatorExecutor",
-            "module_path": "qlib.backtest.executor",
-            "kwargs": {
-                "time_per_step": "day",
-                "generate_portfolio_metrics": True,
-            },
-        },
-        "strategy": {
-            "class": "TopkDropoutStrategy",
-            "module_path": "qlib.contrib.strategy.signal_strategy",
-            "kwargs": {
-                "topk": 50,
-                "n_drop": 5,
-                "signal": ModelSignal(model, dataset)
-            },
-        },
-        "backtest": {
-            "start_time": f"{args.test_start}-01-01",
-            "end_time": f"{args.test_end}-12-31",
-            "account": 100000000,
-            "benchmark": args.benchmark,
-            "exchange_kwargs": {
-                "freq": "day",
-                "limit_threshold": 0.095,
-                "deal_price": "close",
-                "open_cost": 0.0005,
-                "close_cost": 0.0015,
-                "min_cost": 5,
-            },
-        },
-    }
-    return port_analysis_config
 
 
 def plot_scatter_ci(ax, x, y, div_num=20):

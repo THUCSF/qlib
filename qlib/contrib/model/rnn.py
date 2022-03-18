@@ -58,6 +58,9 @@ class RNNLearner(pl.LightningModule):
 
     def training_step(self, batch, batch_idx):
         input, target = batch["input"].cuda(), batch["target"].cuda()
+        if input.shape[0] == 1 and len(input.shape) == 4:
+            input = input[0]
+            target = target[0]
         pred = self.model(input)
         loss = self.loss_fn(pred, target)
         for param_group in self.optim.param_groups:
@@ -79,6 +82,7 @@ class RNNLearner(pl.LightningModule):
     def loss_fn(self, pred, label):
         loss = 0
         if "rgr" in self.loss_type:
+            print(pred.shape, label.shape, pred.min(), pred.max(), label.min(), label.max())
             loss = loss + torch.square(pred - label).mean()
         elif "mae" in self.loss_type:
             loss = loss + (pred - label).abs().mean()
@@ -94,11 +98,13 @@ class RNNLearner(pl.LightningModule):
         return loss
 
     def configure_optimizers(self):
-        self.optim = torch.optim.AdamW(self.model.parameters(),
+        self.optim = torch.optim.Adam(self.model.parameters(),
                         lr=self.lr, weight_decay=self.weight_decay)
-        self.sched = torch.optim.lr_scheduler.MultiStepLR(self.optim,
-            [1, 2, 5, 10], 0.5)
+        #self.sched = torch.optim.lr_scheduler.MultiStepLR(self.optim,
+        #    [1, 2, 5, 10], 0.5)
         #self.sched = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optim, mode="max")
+        self.sched = torch.optim.lr_scheduler.CosineAnnealingLR(
+            self.optim, T_max=10, eta_min=1e-5)
         return {"optimizer": self.optim, "lr_scheduler": self.sched, "monitor": "train_loss"}
 
     def predict_dataset(self, ds):
@@ -144,8 +150,19 @@ class RNNLearner(pl.LightningModule):
         return acc
 
     def _calc_metric(self, outs):
-        pred, y = collate_step_outputs(outs)
-        return self._calc_high_rank_return(pred, y)
+        preds, ys = [], []
+        for out in outs:
+            pred = out["pred"].squeeze().cpu().numpy()
+            y = out["y"].squeeze().cpu().numpy()
+            pred_indice = pred.argsort()
+            gt_indice = y.argsort()
+            Q = min(50, int(pred.shape[0] * 0.1))
+            preds.append(100 + y[pred_indice[-Q:]].mean())
+            ys.append(100 + y[gt_indice[-Q:]].mean())
+        preds = np.array(preds).astype("float32")
+        ys = np.array(ys).astype("float32")
+        return preds.mean() - 100
+        #return (preds / ys - 1).mean() * 100
 
     def training_epoch_end(self, outs):
         res = self._calc_metric(outs)
@@ -158,7 +175,7 @@ class RNNLearner(pl.LightningModule):
     def validation_step(self, batch, batch_idx):
         x, y = batch
         pred = self.model(x["encoder_cont"])
-        return {"y": y[0], "pred": pred}
+        return {"y": y[0].detach(), "pred": pred.detach()}
 
     def validation_step_end(self, outs):
         return outs

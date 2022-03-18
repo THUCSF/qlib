@@ -3,14 +3,11 @@
 import json
 import glob
 import argparse
-import torch
-import pandas as pd
 import numpy as np
-import pprint
-import sys
-
-from matplotlib.pyplot import table
-sys.path.insert(0, "../..")
+import matplotlib
+import matplotlib.pyplot as plt
+matplotlib.style.use('seaborn-poster')
+matplotlib.style.use('ggplot')
 
 
 def str_table_single_std(dic, table_header="", output_std=True):
@@ -116,44 +113,68 @@ if __name__ == "__main__":
             model_dirs = glob.glob(f"{expr_dir}/*")
             model_dirs.sort()
             model_dirs = [m for m in model_dirs if "." not in m]
-            res_dic = {"final": {}, "best": {}}
+            res_dic = {"final": {}}#{"final": {}, "best": {}}
+            monthly_res = {}
             for model_dir in model_dirs:
                 model_name = model_dir[model_dir.rfind("/")+1:]
-                loss_type, layer, window = model_name.split(
+                loss_type, layer = model_name.split(
                     "_")  # e.g. br_l1_w32
                 if loss_type not in res_dic["final"]:
-                    res_dic["final"][loss_type] = {}
-                    res_dic["best"][loss_type] = {}
+                    for k in res_dic:
+                        res_dic[k][loss_type] = {}
                 layer = layer[1:]
-                window = window[1:]
                 model_repeat_dirs = glob.glob(f"{model_dir}/*")
                 model_repeat_dirs.sort()
+                if loss_type not in monthly_res:
+                    monthly_res[loss_type] = {}
                 for mrd in model_repeat_dirs:
                     mr_name = mrd[mrd.rfind("/")+1:]
                     repeat_ind, data_range = mr_name.split("_")
                     repeat_ind = repeat_ind[1:]
                     data_range = data_range[1:]
                     if data_range not in res_dic["final"][loss_type]:
-                        res_dic["final"][loss_type][data_range] = {}
-                        res_dic["best"][loss_type][data_range] = {}
+                        for k in res_dic:
+                            res_dic[k][loss_type][data_range] = {}
                     try:
                         with open(f"{mrd}/result.json", "r") as f:
                             res = json.load(f)
                     except:
-                        pass
-                    for k in ["final", "best"]:
+                        print(f"!> Skip {mrd}/result.json")
+                        continue
+                    if data_range not in monthly_res[loss_type]:
+                        monthly_res[loss_type][data_range] = []
+                    monthly_res[loss_type][data_range].append(
+                        res["monthly_ER"])
+                    for k, v in res_dic.items():
                         set_dic(res_dic[k][loss_type][data_range],
-                                layer, window, res[k]["ER"])
+                            layer, "64", res[k]["ER"])
 
-            for k in ["final", "best"]:
+            for k in res_dic:
                 for loss_type in res_dic[k]:
                     strs = []
-
                     for data_range in res_dic[k][loss_type]:
+                        if data_range in monthly_res[loss_type]:
+                            xs = list(monthly_res[loss_type][data_range][0].keys())
+                            ys = np.array([list(dic.values())
+                                for dic in monthly_res[loss_type][data_range]])
+                            means = ys.mean(0)
+                            mins, maxs = ys.min(0), ys.max(0)
+                            plt.figure(figsize=(30, 10))
+                            plt.plot(xs, means)
+                            plt.fill_between(xs, mins, maxs, alpha=0.2)
+                            plt.plot(xs, np.zeros(len(xs)), "--")
+                            plt.xticks(rotation=30, ha="right")
+                            plt.tight_layout()
+                            plt.savefig(f"{expr_dir}/{loss_type}_{data_range}.png")
+                            plt.close()
+
+                        if len(res_dic[k][loss_type][data_range]) == 0:
+                            print(f"!> Skip {market} {k} {loss_type} {data_range}.")
+                            continue
                         std_dic = dic_mean_std(
                             res_dic[k][loss_type][data_range])
                         table_strs = str_table_single_std(
-                            std_dic, table_header="layer / window")
+                            std_dic, table_header="layer")
                         s = f"{loss_type} on {market}-{data_type} during {data_range}"
                         s = "\\multicolumn{" + str(len(table_strs[0]) - 1) + \
                             "}" + "{c}" + "{" + s + "}"
@@ -164,5 +185,6 @@ if __name__ == "__main__":
                                 [["", s]] + table_strs[1:]
                         strs.extend(table_strs)
 
-                    with open(f"{expr_dir}/{loss_type}_{k}.tex", "w") as f:
-                        f.write(str_latex_table(strs))
+                    if len(strs) > 0:
+                        with open(f"{expr_dir}/{loss_type}_{k}.tex", "w") as f:
+                            f.write(str_latex_table(strs))

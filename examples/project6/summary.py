@@ -3,14 +3,11 @@
 import json
 import glob
 import argparse
-import torch
-import pandas as pd
 import numpy as np
-import pprint
-import sys
-
-from matplotlib.pyplot import table
-sys.path.insert(0, "../..")
+import matplotlib
+import matplotlib.pyplot as plt
+matplotlib.style.use('seaborn-poster')
+matplotlib.style.use('ggplot')
 
 
 def str_table_single_std(dic, table_header="", output_std=True):
@@ -117,6 +114,7 @@ if __name__ == "__main__":
             model_dirs.sort()
             model_dirs = [m for m in model_dirs if "." not in m]
             res_dic = {"final": {}}#{"final": {}, "best": {}}
+            monthly_res = {}
             for model_dir in model_dirs:
                 model_name = model_dir[model_dir.rfind("/")+1:]
                 loss_type, layer = model_name.split(
@@ -127,6 +125,8 @@ if __name__ == "__main__":
                 layer = layer[1:]
                 model_repeat_dirs = glob.glob(f"{model_dir}/*")
                 model_repeat_dirs.sort()
+                if loss_type not in monthly_res:
+                    monthly_res[loss_type] = {}
                 for mrd in model_repeat_dirs:
                     mr_name = mrd[mrd.rfind("/")+1:]
                     repeat_ind, data_range = mr_name.split("_")
@@ -141,6 +141,10 @@ if __name__ == "__main__":
                     except:
                         print(f"!> Skip {mrd}/result.json")
                         continue
+                    if data_range not in monthly_res[loss_type]:
+                        monthly_res[loss_type][data_range] = []
+                    monthly_res[loss_type][data_range].append(
+                        res["monthly_ER"])
                     for k, v in res_dic.items():
                         set_dic(res_dic[k][loss_type][data_range],
                             layer, "64", res[k]["ER"])
@@ -149,6 +153,21 @@ if __name__ == "__main__":
                 for loss_type in res_dic[k]:
                     strs = []
                     for data_range in res_dic[k][loss_type]:
+                        if data_range in monthly_res[loss_type]:
+                            xs = list(monthly_res[loss_type][data_range][0].keys())
+                            ys = np.array([list(dic.values())
+                                for dic in monthly_res[loss_type][data_range]])
+                            means = ys.mean(0)
+                            mins, maxs = ys.min(0), ys.max(0)
+                            plt.figure(figsize=(30, 10))
+                            plt.plot(xs, means)
+                            plt.fill_between(xs, mins, maxs, alpha=0.2)
+                            plt.plot(xs, np.zeros(len(xs)), "--")
+                            plt.xticks(rotation=30, ha="right")
+                            plt.tight_layout()
+                            plt.savefig(f"{expr_dir}/{loss_type}_{data_range}.png")
+                            plt.close()
+
                         if len(res_dic[k][loss_type][data_range]) == 0:
                             print(f"!> Skip {market} {k} {loss_type} {data_range}.")
                             continue
