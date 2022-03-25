@@ -3,43 +3,57 @@
 import torch
 import pandas as pd
 import numpy as np
+from tqdm import tqdm
 from torch.utils.data import Dataset
 
 
 def calc_sample_indice(df, req_len, time_index, inst_index):
     trade_dates = df[time_index].unique() # array
+    trade_dates.sort()
     num = len(trade_dates) - req_len
     sample_indice = [[] for _ in range(num)]
-    for _, inst in df.groupby(inst_index):
+    for _, inst in tqdm(df.groupby(inst_index)):
+        inst_date = inst[time_index]
         for i in range(num):
-            start_date = trade_dates[i]
-            end_date = trade_dates[i + req_len]
-            valid_mask = (inst.datetime >= start_date) & \
-                (inst.datetime < end_date)
-            if valid_mask.sum() < req_len:
-                continue # there is missing data
-            index = inst[valid_mask].index
-            sample_indice[i].append((index[0], index[-1] + 1))
-    return trade_dates, sample_indice
+            j = inst_date.searchsorted(trade_dates[i])
+            if len(inst_date) <= j + req_len or \
+                inst_date.iloc[j] != trade_dates[i] or \
+                inst_date.iloc[j+req_len] != trade_dates[i+req_len]:
+                continue
+            st, ed = inst.index[j], inst.index[j+req_len]
+            sample_indice[i].append((st, ed))
+    return trade_dates[-num:], sample_indice
 
 
 class AlignedTSTensorDataset(Dataset):
-    def __init__(self, df, data, sample_indice):
+    def __init__(self, df, data, sample_indice, horizon,
+            input_names, target_names, time_index, inst_index):
         self.df, self.data = df, data
         self.sample_indice = sample_indice
-    
+        self.input_names = input_names
+        self.target_names = target_names
+        self.time_index, self.inst_index = time_index, inst_index
+        self.horizon = horizon
+
     def __len__(self):
         return len(self.sample_indice)
+
+    def describe(self):
+        n_episodes = sum([len(day_indice) for day_indice in self.sample_indice])
+        idx1 = self.sample_indice[0][0][1]
+        idx2 = self.sample_indice[-1][0][1]
+        st_date = self.df.iloc[idx1][self.time_index]
+        ed_date = self.df.iloc[idx2][self.time_index]
+        print(f"=> {st_date}-{ed_date}, {len(self.sample_indice)} days, {n_episodes} episodes.")
 
     def __getitem__(self, day_index):
         day_indice = self.sample_indice[day_index]
         st_idx, ed_idx = day_indice[0]
-
-        x = torch.cat([torch.from_numpy(self.data
-                [st:ed-self.horizon, :-1]) for st, ed in day_indice])
-        y = torch.cat([torch.from_numpy(self.data
-                [ed-self.horizon:ed, -1]) for _, ed in day_indice])
-
+        target_len = len(self.target_names)
+        x = torch.stack([self.data[st:ed-self.horizon, :-target_len]
+                    for st, ed in day_indice])
+        y = torch.stack([self.data[ed-self.horizon:ed, -target_len:]
+                    for _, ed in day_indice])
         return {
             "input": x,
             "input_time_start": str(self.df.iloc[st_idx][self.time_index]),
@@ -52,24 +66,26 @@ class AlignedTSDataset(object):
     """
     def __init__(self, df, seq_len=64, horizon=1,
                  time_index="datetime", inst_index="instrument",
-                 target_names=None, input_names=None):
+                 input_names=None, target_names=None):
         self.df = df
-        self.data = torch.from_numpy(df[target_names + input_names].values)
+        self.data = torch.from_numpy(df[input_names + target_names].values)
         req_len = seq_len + horizon
+        self.time_index = time_index
+        self.inst_index = inst_index
+        self.input_names = input_names
+        self.target_names = target_names
+        self.horizon = horizon
         self.trade_dates, self.sample_indice = calc_sample_indice(
             df, req_len, time_index, inst_index)
-        #super().__init__(df, data, self.sample_indice)
+        self.trade_dates = pd.Series(self.trade_dates)
 
-    def get_split(self, val_date, test_date):
-        val_idx = self.trade_dates.searchsorted(val_date)
-        test_idx = self.trade_dates.searchsorted(test_date)
-        return {
-            "train": AlignedTSTensorDataset(
-                self.df, self.data, self.sample_indice[:val_idx]),
-            "val": AlignedTSTensorDataset(
-                self.df, self.data, self.sample_indice[val_idx:test_idx]),
-            "test": AlignedTSTensorDataset(
-                self.df, self.data, self.sample_indice[test_idx:])}
+    def get_split(self, start_date, end_date):
+        st = self.trade_dates.searchsorted(start_date)
+        ed = self.trade_dates.searchsorted(end_date)
+        return AlignedTSTensorDataset(
+                self.df, self.data, self.sample_indice[st:ed],
+                self.horizon, self.input_names, self.target_names,
+                self.time_index, self.inst_index)
 
 
 class TSDataset(Dataset):
@@ -85,6 +101,7 @@ class TSDataset(Dataset):
                  time_index="datetime", inst_index="instrument",
                  target_names=None, input_names=None):
         self.df = df
+        self.data = torch.from_numpy(df[input_names + target_names].values)
         self.time_index, self.inst_index = time_index, inst_index
         self.target_names = target_names
         self.input_names = input_names
@@ -102,6 +119,8 @@ class TSDataset(Dataset):
                     for offset in range(L - seq_len - horizon)])
         self.sample_indice = np.array(indice)
 
+    def describe(self):
+        print(f"=> {len(self.sample_indice)} episodes.")
 
     def instance_group(self):
         """Group by instance."""
@@ -112,17 +131,12 @@ class TSDataset(Dataset):
 
     def __getitem__(self, index):
         st, ed = self.sample_indice[index]
-        input_arr = self.df.iloc[st:ed]
-        target_arr = self.df.iloc[ed:ed+self.horizon]
-
-        input_data = torch.from_numpy(input_arr[self.input_names].values)
-        target = torch.from_numpy(target_arr[self.target_names].values)
+        target_len = len(self.target_names)
+        x = self.data[st:ed, :-target_len]
+        y = self.data[ed:ed+self.horizon, -target_len:]
 
         return {
-            "input": input_data,
-            "input_time_start": str(input_arr[self.time_index].values[0]),
-            "input_time_end": str(input_arr[self.time_index].values[-1]),
-            "target": target,
-            "target_time_start": str(target_arr[self.time_index].values[0]),
-            "target_time_end": str(target_arr[self.time_index].values[-1]),
-            "instance": input_arr[self.inst_index].values[0]}
+            "input": x,
+            "input_time_start": str(self.df.iloc[st][self.time_index]),
+            "input_time_end": str(self.df.iloc[ed][self.time_index]),
+            "target": y}

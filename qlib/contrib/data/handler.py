@@ -484,7 +484,7 @@ class RawPriceChange(Alpha158):
         if "ema_vol_diff" in config:
             ema_length = max(len(windows), 5)
             windows = config["ema_vol_diff"].get("windows", range(10))
-            fields += [f"100 * ({REF('volume', d)}/EMA($volume, {ema_length}) - 1)" for d in windows]
+            fields += [f"({REF('volume', d)}/EMA($volume, {ema_length}) - 1)" for d in windows]
             names += ["EVD" + str(d) for d in windows]
         if "volume" in config:
             windows = config["volume"].get("windows", range(10))

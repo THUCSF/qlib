@@ -28,17 +28,11 @@ class RNNLearner(pl.LightningModule):
         model,
         loss_type="rgr",
         lr=0.001,
-        n_epoch=200,
-        early_stop_patience=20,
-        eval_n_epoch=20,
-        weight_decay=0,
+        weight_decay=1e-4,
     ):
         super().__init__()
         self.model = model
         self.lr = lr
-        self.n_epoch = n_epoch
-        self.early_stop_patience = early_stop_patience
-        self.eval_n_epoch = eval_n_epoch
         self.loss_type = loss_type
         self.weight_decay = weight_decay
 
@@ -62,6 +56,7 @@ class RNNLearner(pl.LightningModule):
             input = input[0]
             target = target[0]
         pred = self.model(input)
+        #print(pred.min(), pred.max(), target.min(), target.max(), pred.shape, target.shape)
         loss = self.loss_fn(pred, target)
         for param_group in self.optim.param_groups:
             self.log("lr", float(param_group['lr']))
@@ -82,14 +77,13 @@ class RNNLearner(pl.LightningModule):
     def loss_fn(self, pred, label):
         loss = 0
         if "rgr" in self.loss_type:
-            print(pred.shape, label.shape, pred.min(), pred.max(), label.min(), label.max())
             loss = loss + torch.square(pred - label).mean()
         elif "mae" in self.loss_type:
             loss = loss + (pred - label).abs().mean()
         elif "cls" in self.loss_type:
             loss = loss + F.cross_entropy(pred, label[:, 1].long())
         elif "br" in self.loss_type:  # beyesian regression
-            pred_y, pred_logvar = pred[:, 0], pred[:, 1]
+            pred_y, pred_logvar = pred[:, :, :1], pred[:, :, 1:]
             pred_std = torch.exp(pred_logvar * 0.5)
             pred_var = torch.exp(pred_logvar)
             const = math.log(2 * math.pi) / 2
@@ -98,7 +92,7 @@ class RNNLearner(pl.LightningModule):
         return loss
 
     def configure_optimizers(self):
-        self.optim = torch.optim.Adam(self.model.parameters(),
+        self.optim = torch.optim.AdamW(self.model.parameters(),
                         lr=self.lr, weight_decay=self.weight_decay)
         #self.sched = torch.optim.lr_scheduler.MultiStepLR(self.optim,
         #    [1, 2, 5, 10], 0.5)
@@ -173,17 +167,20 @@ class RNNLearner(pl.LightningModule):
         return outs
 
     def validation_step(self, batch, batch_idx):
-        x, y = batch
-        pred = self.model(x["encoder_cont"])
-        return {"y": y[0].detach(), "pred": pred.detach()}
+        input, target = batch["input"].cuda(), batch["target"].cuda()
+        if input.shape[0] == 1 and len(input.shape) == 4:
+            input = input[0]
+            target = target[0]
+        pred = self.model(input)
+        return {"y": target, "pred": pred}
 
     def validation_step_end(self, outs):
         return outs
 
     def validation_epoch_end(self, outs):
-        hrr = self._calc_metric(outs)
-        self.log("val_metric", hrr)
-        return hrr
+        res = self._calc_metric(outs)
+        self.log("val_metric", res)
+        return res
 
 
 class RNN(torch.nn.Module):
@@ -205,7 +202,7 @@ class RNN(torch.nn.Module):
         if self.core_type == "LSTM":
             out, _ = self.core(x)
             if last_only:
-                return self.fc_out(out[:, -1, :])
+                return self.fc_out(out[:, -1:, :])
             else:
                 out = self.fc_out(out.view(-1, out.shape[-1]))
                 return out.view(x.shape[0], x.shape[1], -1)

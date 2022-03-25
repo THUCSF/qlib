@@ -221,10 +221,7 @@ def get_train_config(args):
             "kwargs": {
                 "loss_type": args.loss_type,
                 "lr": 0.002,
-                "n_epoch": args.n_epoch,
-                "early_stop_patience": args.n_epoch,  # no early stopping
-                "eval_n_epoch": 20,
-                "weight_decay": 0.0002
+                "weight_decay": 1e-4
             },
         },
         "dataset": {

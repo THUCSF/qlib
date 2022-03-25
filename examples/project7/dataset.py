@@ -35,16 +35,21 @@ class AlignedTSDataset(Dataset):
                 st, ed = inst.index[j], inst.index[j+req_len]
                 self.sample_indice[i].append((st, ed))
 
+    def describe(self):
+        n_episodes = sum([len(day_indice) for day_indice in self.sample_indice])
+        print(f"=> {len(self.sample_indice)} Days, {n_episodes} episodes.")
+
     def __len__(self):
         return len(self.sample_indice)
 
     def __getitem__(self, day_index):
         day_indice = self.sample_indice[day_index]
         start_index, end_index = day_indice[0]
-
-        x = torch.stack([self.data[st:ed-self.horizon, :-1] for st, ed in day_indice])
-        y = torch.stack([self.data[ed-self.horizon:ed, -1] for _, ed in day_indice])
-
+        target_len = len(self.target_names)
+        x = torch.stack([self.data[st:ed-self.horizon, :-target_len]
+            for st, ed in day_indice])
+        y = torch.stack([self.data[ed-self.horizon:ed, -target_len:]
+            for _, ed in day_indice])
         return {
             "input": x,
             "input_time_start": str(self.df.iloc[start_index][self.time_index]),
@@ -66,6 +71,7 @@ class TSDataset(Dataset):
                  time_index="datetime", inst_index="instrument",
                  target_names=None, input_names=None):
         self.df = df
+        self.data = torch.from_numpy(df[input_names + target_names].values)
         self.time_index, self.inst_index = time_index, inst_index
         self.target_names = target_names
         self.input_names = input_names
@@ -83,6 +89,9 @@ class TSDataset(Dataset):
                     for offset in range(L - seq_len - horizon)])
         self.sample_indice = np.array(indice)
 
+    def describe(self):
+        print(f"=> {len(self.sample_indice)} episodes.")
+
     def instance_group(self):
         """Group by instance."""
         return self.df.groupby(self.inst_index)
@@ -92,17 +101,12 @@ class TSDataset(Dataset):
 
     def __getitem__(self, index):
         st, ed = self.sample_indice[index]
-        input_arr = self.df.iloc[st:ed]
-        target_arr = self.df.iloc[ed:ed+self.horizon]
-
-        input_data = torch.from_numpy(input_arr[self.input_names].values)
-        target = torch.from_numpy(target_arr[self.target_names].values)
+        target_len = len(self.target_names)
+        x = self.data[st:ed, :-target_len]
+        y = self.data[ed:ed+self.horizon, -target_len:]
 
         return {
-            "input": input_data,
-            "input_time_start": str(input_arr[self.time_index].values[0]),
-            "input_time_end": str(input_arr[self.time_index].values[-1]),
-            "target": target,
-            "target_time_start": str(target_arr[self.time_index].values[0]),
-            "target_time_end": str(target_arr[self.time_index].values[-1]),
-            "instance": input_arr[self.inst_index].values[0]}
+            "input": x,
+            "input_time_start": str(self.df.iloc[st][self.time_index]),
+            "input_time_end": str(self.df.iloc[ed][self.time_index]),
+            "target": y}

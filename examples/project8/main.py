@@ -1,7 +1,7 @@
 """Test LSTM layers
 """
 # pylint: disable=wrong-import-position,multiple-imports,import-error,invalid-name,line-too-long
-import json, copy, argparse, os, torch, sys
+import json, copy, argparse, os, torch, sys, glob
 import pytorch_lightning.loggers as pl_logger
 import pytorch_lightning as pl
 import matplotlib.pyplot as plt
@@ -10,6 +10,7 @@ import pandas as pd
 import numpy as np
 from tqdm import tqdm
 from torch.utils.data import DataLoader
+from pytorch_lightning.callbacks import ModelCheckpoint
 sys.path.insert(0, "../..")
 import qlib, lib
 from lib import torch2numpy
@@ -70,17 +71,21 @@ def df_to_tsdf(df):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # training options
-    parser.add_argument("--n-epoch", default=100, type=int,
+    parser.add_argument("--strict-validation", default=0, type=int,
+                        help="Whether to ensure strict validation set.")
+    parser.add_argument("--n-epoch", default=50, type=int,
                         help="The total training epochs.")
     parser.add_argument("--batch-size", default=1024, type=int,
                         help="Training batchsize.")
     parser.add_argument("--seq-len", default=64, type=int,
                         help="Training sequence length.")
+    parser.add_argument("--horizon", default=1, type=int,
+                        help="Predicted length.")
     parser.add_argument("--gpu-id", default="0", type=str)
     parser.add_argument("--market", default="csi300", type=str,
                         choices=["csi300", "main"])
     parser.add_argument("--train-start", default=2011, type=int)
-    parser.add_argument("--train-end", default=2012, type=int)
+    parser.add_argument("--train-end", default=2014, type=int)
     parser.add_argument("--repeat-ind", default=0, type=int,
                         help="The index of repeats (to distinguish different runs).")
     # architecture options
@@ -101,8 +106,8 @@ if __name__ == "__main__":
     parser.add_argument("--n-drop", default=5, type=int)
     parser.add_argument("--eval-only", default="0", type=str)
     parser.add_argument("--benchmark", default="SH000300", type=str)
-    parser.add_argument("--test-start", default=2013, type=int)
-    parser.add_argument("--test-end", default=2014, type=int)
+    parser.add_argument("--test-start", default=2015, type=int)
+    parser.add_argument("--test-end", default=2015, type=int)
     args = parser.parse_args()
     lib.set_cuda_devices(args.gpu_id)
 
@@ -119,6 +124,8 @@ if __name__ == "__main__":
     torch.manual_seed(1997 + args.repeat_ind)
     torch.cuda.manual_seed(1997 + args.repeat_ind)
 
+    train_end = args.train_end
+    args.train_end = args.test_end # to retrieve all data
     args.label_expr = fetch_label(args.label_type)
     task = lib.get_train_config(args)
     dataset = init_instance_by_config(task["dataset"])
@@ -126,77 +133,113 @@ if __name__ == "__main__":
     learner_config = copy.deepcopy(task["learner"])
     learner_config["kwargs"]["model"] = model
     learner = init_instance_by_config(learner_config).cuda()
+    args.train_end = train_end
 
-    train_df = dataset.prepare(["train"],
+    full_df = dataset.prepare(["train"],
         col_set=["feature", "label"], data_key="learn")[0]
-    tvcv_names = list(train_df["feature"].columns)
-    target_names = list(train_df["label"].columns)
-    train_df = df_to_tsdf(train_df)
-    train_ds = AlignedTSDataset(train_df, # AlignedTSDataset
-        seq_len=args.seq_len, horizon=1,
+    tvcv_names = list(full_df["feature"].columns)
+    target_names = list(full_df["label"].columns)
+    full_df = df_to_tsdf(full_df)
+    full_ds = AlignedTSDataset(full_df, # AlignedTSDataset
+        seq_len=args.seq_len, horizon=args.horizon,
         target_names=target_names,
         input_names=tvcv_names)
-    train_ds.describe()
-    train_dl = DataLoader(train_ds,
-        batch_size=1, shuffle=True,
-        pin_memory=True, num_workers=8)
 
+    val_end_date = f"{args.train_end+1}-1-1"
+    train_end_date = f"{args.train_end}-12-1" \
+                        if args.strict_validation else val_end_date
+    train_ds = full_ds.get_split(f"{args.train_start}-1-1", train_end_date)
+    val_ds = full_ds.get_split(f"{args.train_end}-12-1", val_end_date)
+    print("=> Training dataset:")
+    train_ds.describe()
+    print("=> Validation dataset:")
+    val_ds.describe()
+    train_dl = DataLoader(train_ds, batch_size=1, shuffle=True)
+    val_dl = DataLoader(val_ds, batch_size=1, shuffle=False)
+
+    print(f"=> Initial training on {args.train_start}-{args.train_end}")
     logger = pl_logger.TensorBoardLogger(f"{model_dir}/{model_name}")
+    model_prefix = f"model_y{args.test_start}_m01"
+    mc = ModelCheckpoint(save_weights_only=True,
+      dirpath=f"{model_dir}/{model_name}",
+      filename=model_prefix + "_n={epoch}_f={val_metric:.2f}",
+      monitor="val_metric", mode="max")
     trainer = pl.Trainer(
         max_epochs=args.n_epoch,
         gpus=1,
-        progress_bar_refresh_rate=1,
-        accumulate_grad_batches=10,
         log_every_n_steps=10,
-        callbacks=[],
+        callbacks=[mc],
         logger=logger)
-    trainer.fit(learner, train_dl)
-    torch.save(model.state_dict(), f"{model_dir}/{model_name}/model.pth")
+    trainer.fit(learner, train_dl, val_dl)
+    torch.save(model.state_dict(),
+        f"{model_dir}/{model_name}/{model_prefix}_final.pth")
 
-    test_df = dataset.prepare(["test"],
-        col_set=["feature", "label"], data_key="infer")[0]
-    test_df = df_to_tsdf(test_df)
-    start_date = f"{args.test_start-1}-01-01"
-    new_df = []
-    for g_name, g in tqdm(train_df.groupby("instrument")):
-        new_df.append(g[g.datetime >= start_date])
-        new_df.append(test_df[test_df.instrument == g_name])
-    test_df = pd.concat(new_df)
-    test_df.reset_index(inplace=True)
-    test_df.drop(columns="index", inplace=True)
-    test_ds = TSDataset(test_df,
-        seq_len=args.seq_len, horizon=1,
-        target_names=target_names,
-        input_names=tvcv_names)
+    for i in range(1, 13): # for now, roll only in one year
+        test_start_date = f"{args.test_start}-{i}-1"
+        test_end_date = f"{args.test_start}-{i+1}-1" if i < 12 else \
+                            f"{args.test_start+1}-1-1"
+        train_end_date = test_start_date if args.strict_validation \
+                            else test_end_date
+        train_ds = full_ds.get_split(
+                        f"{args.train_start}-1-1", train_end_date)
+        val_ds = full_ds.get_split(
+                    test_start_date, test_end_date)
+        print("=> Training dataset:")
+        train_ds.describe()
+        print("=> Validation dataset:")
+        val_ds.describe()
+        model_prefix = f"model_y{args.test_start}_m{i+1:02d}"
+        mc = ModelCheckpoint(save_weights_only=True,
+            dirpath=f"{model_dir}/{model_name}",
+            filename=model_prefix + "_n={epoch}_f={val_metric:.2f}",
+            monitor="val_metric", mode="max")
+        train_dl = DataLoader(train_ds, batch_size=1, shuffle=True)
+        val_dl = DataLoader(val_ds, batch_size=1, shuffle=False)
+        trainer = pl.Trainer(
+            max_epochs=args.n_epoch,
+            gpus=1,
+            log_every_n_steps=1,
+            callbacks=[mc],
+            logger=logger)
+        trainer.fit(learner, train_dl, val_dl)
+        torch.save(model.state_dict(),
+            f"{model_dir}/{model_name}/{model_prefix}_final.pth")
 
     learner.cuda()
-    test_scores, test_preds, test_insts, test_dates, test_indice = \
-        learner.predict_dataset(test_ds)
-    mask = pd.Series(test_dates) > f"{args.test_start}-01-01"
-    test_scores, test_preds = test_scores[mask], test_preds[mask]
-    test_signal = pd.Series(test_scores, [test_insts[mask], test_dates[mask]])
-    test_signal.index.set_names(["instrument", "datetime"], inplace=True)
+    st = f"{args.test_start-1}-6-1"
+    ed = f"{args.test_start}-12-31"
+    full_df = [g[(g.datetime >= st) & (g.datetime <= ed)]
+                    for _, g in full_df.groupby("instrument")]
+    full_df = pd.concat(full_df)
+    full_df.reset_index(inplace=True)
+    full_df.drop(columns="index", inplace=True)
+    test_ds = TSDataset(full_df,
+                seq_len=args.seq_len, horizon=args.horizon,
+                target_names=target_names, input_names=tvcv_names)
+    test_signals = []
+    for i in range(1, 13):
+        model_path = f"{model_dir}/{model_name}/model_y{args.test_start}_m{i:02d}"
+        # final model
+        model.load_state_dict(torch.load(f"{model_path}_final.pth"))
+        test_scores, test_preds, test_insts, test_dates, test_indice = \
+            learner.predict_dataset(test_ds)
+        # best model
+        best_model_path = glob.glob(f"{model_path}_n=*.ckpt")[0]
+
+        learner.load_state_dict(torch.load(best_model_path)["state_dict"])
+        test_dates = pd.Series(test_dates)
+        st = f"{args.test_start}-{i}-1"
+        ed = f"{args.test_start}-{i+1}-1" if i < 12 else \
+                            f"{args.test_start+1}-1-1"
+        mask = (st <= test_dates) & (test_dates < ed)
+        test_scores, test_preds = test_scores[mask], test_preds[mask]
+        test_signals.append(pd.Series(test_scores,
+            [test_insts[mask], test_dates[mask]]))
+    test_signals = pd.concat(test_signals)
+    test_signals.index.set_names(["instrument", "datetime"], inplace=True)
+    report, final_res, _, _, month_res = lib.backtest_signal(test_signals, args)
     test_gt = test_ds.df[test_ds.target_names].values[test_indice]
     test_gt = test_gt[mask].squeeze()
-    report, final_res, _, _, month_res = lib.backtest_signal(test_signal, args)
-
-    train_ds = TSDataset(train_df,
-        seq_len=args.seq_len, horizon=1,
-        target_names=target_names,
-        input_names=tvcv_names)
-    train_scores, train_preds, _, _, train_indice = \
-        learner.predict_dataset(train_ds)
-    train_gt = train_ds.df[train_ds.target_names].values
-    train_gt = train_gt[train_indice].squeeze()
-    if args.loss_type == "br":
-        plot_br([train_scores, test_scores],
-                [train_preds, test_preds],
-                [train_gt, test_gt],
-                model_dir, model_name)
-    else:
-        plot_normal([train_scores, test_scores],
-                    [train_gt, test_gt],
-                    model_dir, model_name)
 
     month_ret_key = 'return_total_return'
     month_er_key = 'excess_return_without_cost_total_return'
