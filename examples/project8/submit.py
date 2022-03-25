@@ -55,11 +55,10 @@ def train_mlp():
 
 def train_rnn():
     cmds = []
-    cmd = "python main.py --market {market} --repeat-ind {repeat_ind} --loss-type {loss_type} --n-layer {n_layer} --train-end {train_end} --test-start {test_start} --test-end {test_end} --top-k 50 --n-drop 5"
+    cmd = "python main.py --market {market} --repeat-ind {repeat_ind} --loss-type {loss_type} --n-layer {n_layer} --train-end {train_end} --test-start {test_start} --test-end {test_end} --top-k 50 --n-drop 5 --n1-epoch 1 --n2-epoch 1"
     for repeat_ind in range(5):  # 1500 models to be trained
-        for train_end in range(2014, 2020, 2):  # 4
-            test_start = train_end + 1
-            test_end = test_start + 1
+        for train_end in range(2013, 2021):  # 4
+            test_end = test_start = train_end + 1
             for data_type in ["raw"]:
                 for market in ["main"]:
                     for loss_type in ["rgr"]:

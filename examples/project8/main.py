@@ -71,10 +71,12 @@ def df_to_tsdf(df):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # training options
-    parser.add_argument("--strict-validation", default=0, type=int,
+    parser.add_argument("--strict-validation", default=1, type=int,
                         help="Whether to ensure strict validation set.")
-    parser.add_argument("--n-epoch", default=50, type=int,
-                        help="The total training epochs.")
+    parser.add_argument("--n1-epoch", default=50, type=int,
+                        help="The total initial training epochs.")
+    parser.add_argument("--n2-epoch", default=10, type=int,
+                        help="The rolling-based training epochs.")
     parser.add_argument("--batch-size", default=1024, type=int,
                         help="Training batchsize.")
     parser.add_argument("--seq-len", default=64, type=int,
@@ -165,7 +167,7 @@ if __name__ == "__main__":
       filename=model_prefix + "_n={epoch}_f={val_metric:.2f}",
       monitor="val_metric", mode="max")
     trainer = pl.Trainer(
-        max_epochs=args.n_epoch,
+        max_epochs=args.n1_epoch,
         gpus=1,
         log_every_n_steps=10,
         callbacks=[mc],
@@ -196,7 +198,7 @@ if __name__ == "__main__":
         train_dl = DataLoader(train_ds, batch_size=1, shuffle=True)
         val_dl = DataLoader(val_ds, batch_size=1, shuffle=False)
         trainer = pl.Trainer(
-            max_epochs=args.n_epoch,
+            max_epochs=args.n2_epoch,
             gpus=1,
             log_every_n_steps=1,
             callbacks=[mc],
@@ -216,43 +218,64 @@ if __name__ == "__main__":
     test_ds = TSDataset(full_df,
                 seq_len=args.seq_len, horizon=args.horizon,
                 target_names=target_names, input_names=tvcv_names)
-    test_signals = []
+    final_signals, best_signals, test_indice = [], [], []
     for i in range(1, 13):
         model_path = f"{model_dir}/{model_name}/model_y{args.test_start}_m{i:02d}"
         # final model
         model.load_state_dict(torch.load(f"{model_path}_final.pth"))
-        test_scores, test_preds, test_insts, test_dates, test_indice = \
+        test_scores, test_preds, test_insts, test_dates, idx = \
             learner.predict_dataset(test_ds)
-        # best model
-        best_model_path = glob.glob(f"{model_path}_n=*.ckpt")[0]
-
-        learner.load_state_dict(torch.load(best_model_path)["state_dict"])
         test_dates = pd.Series(test_dates)
         st = f"{args.test_start}-{i}-1"
         ed = f"{args.test_start}-{i+1}-1" if i < 12 else \
                             f"{args.test_start+1}-1-1"
         mask = (st <= test_dates) & (test_dates < ed)
+        test_indice.append(idx[mask])
         test_scores, test_preds = test_scores[mask], test_preds[mask]
-        test_signals.append(pd.Series(test_scores,
+        final_signals.append(pd.Series(test_scores,
             [test_insts[mask], test_dates[mask]]))
-    test_signals = pd.concat(test_signals)
-    test_signals.index.set_names(["instrument", "datetime"], inplace=True)
-    report, final_res, _, _, month_res = lib.backtest_signal(test_signals, args)
-    test_gt = test_ds.df[test_ds.target_names].values[test_indice]
-    test_gt = test_gt[mask].squeeze()
+
+        # best model
+        best_model_path = glob.glob(f"{model_path}_n=*.ckpt")[0]
+        learner.load_state_dict(torch.load(best_model_path)["state_dict"])
+        test_scores, test_preds, _, _, _ = \
+            learner.predict_dataset(test_ds)
+        test_scores, test_preds = test_scores[mask], test_preds[mask]
+        best_signals.append(pd.Series(test_scores,
+            [test_insts[mask], test_dates[mask]]))
+    final_signals = pd.concat(final_signals)
+    best_signals = pd.concat(best_signals)
+    final_signals.index.set_names(["instrument", "datetime"], inplace=True)
+    best_signals.index.set_names(["instrument", "datetime"], inplace=True)
+    final_report, final_res, _, _, final_month_res = \
+        lib.backtest_signal(final_signals, args)
+    best_report, best_res, _, _, best_month_res = \
+        lib.backtest_signal(best_signals, args)
+    test_indice = np.concatenate(test_indice)
+    test_gt = test_ds.df[test_ds.target_names].values[test_indice].squeeze()
 
     month_ret_key = 'return_total_return'
     month_er_key = 'excess_return_without_cost_total_return'
     month_bench_key = 'bench_return_total_return'
-    eval_result = {"final": {
-            "ER": float(final_res['ER'].risk['annualized_return']),
-            "ERC": float(final_res['ERC'].risk['annualized_return'])
-        }, "benchmark": {
+    eval_result = {
+        "benchmark": {
             "R": float(final_res['benchmark'].risk['annualized_return']),
-        }, "monthly_return": month_res[month_ret_key].to_dict()
-         , "monthly_ER": month_res[month_er_key].to_dict()
-         , "monthly_bench": month_res[month_bench_key].to_dict()
-        }
+            "monthly_return": final_month_res[month_bench_key].to_dict()
+        },
+        "best": {
+            "ER": float(best_res['ER'].risk['annualized_return']),
+            "ERC": float(best_res['ERC'].risk['annualized_return']),
+            "monthly_return": best_month_res[month_ret_key].to_dict(),
+            "monthly_ER": best_month_res[month_er_key].to_dict(),
+            "daily_return": best_report["return"].to_dict()
+        },
+        "final": {
+            "ER": float(final_res['ER'].risk['annualized_return']),
+            "ERC": float(final_res['ERC'].risk['annualized_return']),
+            "monthly_return": final_month_res[month_ret_key].to_dict(),
+            "monthly_ER": final_month_res[month_er_key].to_dict(),
+            "daily_return": final_report["return"].to_dict()
+        }}
     config = {
         "learner_config": task["learner"],
         "model_config": task["model"],
