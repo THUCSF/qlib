@@ -124,6 +124,7 @@ class TopkDropoutStrategy(BaseSignalStrategy):
         pred_score = self.signal.get_signal(start_time=pred_start_time, end_time=pred_end_time)
         # NOTE: the current version of topk dropout strategy can't handle pd.DataFrame(multiple signal)
         # So it only leverage the first col of signal
+        print(trade_start_time, trade_end_time, pred_start_time, pred_end_time)
         if isinstance(pred_score, pd.DataFrame):
             pred_score = pred_score.iloc[:, 0]
         if pred_score is None:
@@ -248,7 +249,7 @@ class TopkDropoutStrategy(BaseSignalStrategy):
         # buy new stock
         # note the current has been changed
         current_stock_list = current_temp.get_stock_list()
-        value = cash * self.risk_degree / len(buy) if len(buy) > 0 else 0
+        value = int(cash * self.risk_degree / len(buy)) if len(buy) > 0 else 0
         # open_cost should be considered in the real trading environment, while the backtest in evaluate.py does not
         # consider it as the aim of demo is to accomplish same strategy as evaluate.py, so comment out this line
         # value = value / (1+self.trade_exchange.open_cost) # set open_cost limit
@@ -276,7 +277,10 @@ class TopkDropoutStrategy(BaseSignalStrategy):
                 print(f"=> Buy {code} with {buy_amount} at {trade_start_time} | {value} {buy_price}")
                 raise ValueError
             buy_order_list.append(buy_order)
-        return TradeDecisionWO(sell_order_list + buy_order_list, self)
+        decisions = TradeDecisionWO(sell_order_list + buy_order_list, self)
+        print(pred_score.min(), pred_score.max())
+        print(decisions)
+        return decisions
 
 
 class WeightStrategyBase(BaseSignalStrategy):

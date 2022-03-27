@@ -117,9 +117,9 @@ if __name__ == "__main__":
     model_dir = f"expr/{args.market}_{args.data_type}_{args.label_type}/{args.loss_type}_l{args.n_layer}"
     if not os.path.exists(model_dir):
         os.makedirs(model_dir)
-    if os.path.exists(f"{model_dir}/{model_name}/result.json"):
-        print(f"=> Skip {model_dir}/{model_name}/result.json.")
-        exit(0)
+    #if os.path.exists(f"{model_dir}/{model_name}/result.json"):
+    #    print(f"=> Skip {model_dir}/{model_name}/result.json.")
+    #    exit(0)
 
     provider_uri = "../../data/china_stock_qlib_adj"
     qlib.init(provider_uri=provider_uri, region=REG_CN)
@@ -165,7 +165,8 @@ if __name__ == "__main__":
         st = f"{args.test_start}-{i}-1"
         ed = f"{args.test_start}-{i+1}-1" if i < 12 else \
                             f"{args.test_start+1}-1-1"
-        mask = (st <= test_dates) & (test_dates < ed)
+        mask = (st <= test_dates) & (test_dates < ed) if i > 1 \
+            else (test_dates < ed)
         test_indice.append(idx[mask])
         test_scores, test_preds = test_scores[mask], test_preds[mask]
         final_signals.append(pd.Series(test_scores,
@@ -190,6 +191,29 @@ if __name__ == "__main__":
         lib.backtest_signal(best_signals, args)
     test_indice = np.concatenate(test_indice)
     test_gt = test_ds.df[test_ds.target_names].values[test_indice].squeeze()
+
+    train_df = [g[g.datetime <= f"{args.train_end}-12-31"]
+                    for _, g in full_df.groupby("instrument")]
+    train_df = pd.concat(train_df)
+    train_df.reset_index(inplace=True)
+    train_df.drop(columns="index", inplace=True)
+    train_ds = TSDataset(train_df,
+        seq_len=args.seq_len, horizon=1,
+        target_names=target_names,
+        input_names=tvcv_names)
+    train_scores, train_preds, _, _, train_indice = \
+        learner.predict_dataset(train_ds)
+    train_gt = train_ds.df[train_ds.target_names].values
+    train_gt = train_gt[train_indice].squeeze()
+    if args.loss_type == "br":
+        plot_br([train_scores, test_scores],
+                [train_preds, test_preds],
+                [train_gt, test_gt],
+                model_dir, model_name)
+    else:
+        plot_normal([train_scores, test_scores],
+                    [train_gt, test_gt],
+                    model_dir, model_name)
 
     month_ret_key = 'return_total_return'
     month_er_key = 'excess_return_without_cost_total_return'

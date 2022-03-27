@@ -142,6 +142,10 @@ if __name__ == "__main__":
     tvcv_names = list(full_df["feature"].columns)
     target_names = list(full_df["label"].columns)
     full_df = df_to_tsdf(full_df)
+    valid_mask = full_df[target_names[0]].abs() < 11
+    full_df = full_df[valid_mask]
+    full_df.reset_index(inplace=True)
+    full_df.drop(columns="index", inplace=True)
     full_ds = AlignedTSDataset(full_df, # AlignedTSDataset
         seq_len=args.seq_len, horizon=args.horizon,
         target_names=target_names,
@@ -210,12 +214,12 @@ if __name__ == "__main__":
     learner.cuda()
     st = f"{args.test_start-1}-6-1"
     ed = f"{args.test_start}-12-31"
-    full_df = [g[(g.datetime >= st) & (g.datetime <= ed)]
+    test_df = [g[(g.datetime >= st) & (g.datetime <= ed)]
                     for _, g in full_df.groupby("instrument")]
-    full_df = pd.concat(full_df)
-    full_df.reset_index(inplace=True)
-    full_df.drop(columns="index", inplace=True)
-    test_ds = TSDataset(full_df,
+    test_df = pd.concat(test_df)
+    test_df.reset_index(inplace=True)
+    test_df.drop(columns="index", inplace=True)
+    test_ds = TSDataset(test_df,
                 seq_len=args.seq_len, horizon=args.horizon,
                 target_names=target_names, input_names=tvcv_names)
     final_signals, best_signals, test_indice = [], [], []
@@ -254,6 +258,29 @@ if __name__ == "__main__":
     test_indice = np.concatenate(test_indice)
     test_gt = test_ds.df[test_ds.target_names].values[test_indice].squeeze()
 
+    train_df = [g[g.datetime <= f"{args.train_end}-12-31"]
+                    for _, g in full_df.groupby("instrument")]
+    train_df = pd.concat(train_df)
+    train_df.reset_index(inplace=True)
+    train_df.drop(columns="index", inplace=True)
+    train_ds = TSDataset(train_df,
+        seq_len=args.seq_len, horizon=1,
+        target_names=target_names,
+        input_names=tvcv_names)
+    train_scores, train_preds, _, _, train_indice = \
+        learner.predict_dataset(train_ds)
+    train_gt = train_ds.df[train_ds.target_names].values
+    train_gt = train_gt[train_indice].squeeze()
+    if "br" in args.loss_type:
+        plot_br([train_scores, test_scores],
+                [train_preds, test_preds],
+                [train_gt, test_gt],
+                model_dir, model_name)
+    else:
+        plot_normal([train_scores, test_scores],
+                    [train_gt, test_gt],
+                    model_dir, model_name)
+
     month_ret_key = 'return_total_return'
     month_er_key = 'excess_return_without_cost_total_return'
     month_bench_key = 'bench_return_total_return'
@@ -267,14 +294,16 @@ if __name__ == "__main__":
             "ERC": float(best_res['ERC'].risk['annualized_return']),
             "monthly_return": best_month_res[month_ret_key].to_dict(),
             "monthly_ER": best_month_res[month_er_key].to_dict(),
-            "daily_return": best_report["return"].to_dict()
+            "daily_return": {k.strftime("%Y-%m-%d"): v
+                for k, v in best_report["return"].to_dict().items()}
         },
         "final": {
             "ER": float(final_res['ER'].risk['annualized_return']),
             "ERC": float(final_res['ERC'].risk['annualized_return']),
             "monthly_return": final_month_res[month_ret_key].to_dict(),
             "monthly_ER": final_month_res[month_er_key].to_dict(),
-            "daily_return": final_report["return"].to_dict()
+            "daily_return": {k.strftime("%Y-%m-%d"): v
+                for k, v in final_report["return"].to_dict().items()}
         }}
     config = {
         "learner_config": task["learner"],

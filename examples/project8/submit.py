@@ -78,18 +78,20 @@ def eval_rnn():
     cmds = []
     cmd = "python evaluate.py --market {market} --repeat-ind {repeat_ind} --loss-type {loss_type} --n-layer {n_layer} --train-end {train_end} --test-start {test_start} --test-end {test_end}"
     for repeat_ind in range(1):  # 1500 models to be trained
-        for train_end in range(2012, 2020, 2):
-            test_start = train_end + 1
-            test_end = test_start + 1
+        for train_end in range(2013, 2021):  # 4
+            test_end = test_start = train_end + 1
             for data_type in ["raw"]:
-                for market in ["csi300", "main"]:
+                for market in ["main"]:
                     for loss_type in ["rgr"]:
-                        for n_layer in [1, 2]:
-                            cmds.append(cmd.format(repeat_ind=repeat_ind,
-                                                   data_type=data_type, market=market, loss_type=loss_type,
-                                                   n_layer=n_layer,
-                                                   train_end=train_end,
-                                                   test_start=test_start, test_end=test_end))
+                        for n_layer in [1]:
+                            cmds.append(cmd.format(
+                                repeat_ind=repeat_ind,
+                                data_type=data_type, market=market,
+                                loss_type=loss_type,
+                                n_layer=n_layer,
+                                train_end=train_end,
+                                test_start=test_start,
+                                test_end=test_end))
     return cmds
 
 

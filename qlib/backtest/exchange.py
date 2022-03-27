@@ -422,8 +422,8 @@ class Exchange:
             raise NotImplementedError(f"This type of input is not supported")
         deal_price = self.quote.get_data(stock_id, start_time, end_time, field=pstr, method=method)
         if method is not None and (deal_price is None or np.isnan(deal_price) or deal_price <= 1e-08):
-            self.logger.warning(f"(stock_id:{stock_id}, trade_time:{(start_time, end_time)}, {pstr}): {deal_price}!!!")
-            self.logger.warning(f"setting deal_price to close price")
+            print(f"!> (stock_id:{stock_id}, trade_time:{(start_time, end_time)}, {pstr}): {deal_price}.")
+            print(f"!> Setting deal_price to close price.")
             deal_price = self.get_close(stock_id, start_time, end_time, method)
         return deal_price
 
@@ -645,7 +645,9 @@ class Exchange:
                 factor=factor, stock_id=stock_id, start_time=start_time, end_time=end_time
             )
             return (deal_amount * factor + 0.1) // self.trade_unit * self.trade_unit / factor
-        return deal_amount
+        # [Jianjin]: should be rounding to trade unit, but as we are using
+        # adj price, some stocks may have very large adj, so let's round to integer.
+        return int(deal_amount)
 
     def _clip_amount_by_volume(self, order: Order, dealt_order_amount: dict) -> int:
         """parse the capacity limit string and return the actual amount of orders that can be executed.

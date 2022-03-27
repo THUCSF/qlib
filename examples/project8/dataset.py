@@ -51,9 +51,9 @@ class AlignedTSTensorDataset(Dataset):
         st_idx, ed_idx = day_indice[0]
         target_len = len(self.target_names)
         x = torch.stack([self.data[st:ed-self.horizon, :-target_len]
-                    for st, ed in day_indice])
-        y = torch.stack([self.data[ed-self.horizon:ed, -target_len:]
-                    for _, ed in day_indice])
+                    for st, ed in day_indice], 1)
+        y = torch.stack([self.data[st+self.horizon:ed, -target_len:]
+                    for st, ed in day_indice], 1)
         return {
             "input": x,
             "input_time_start": str(self.df.iloc[st_idx][self.time_index]),

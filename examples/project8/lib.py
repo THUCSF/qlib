@@ -7,7 +7,7 @@ import pandas as pd
 
 from qlib.contrib.evaluate import my_risk_analysis
 from qlib.backtest import backtest
-from qlib.backtest.signal import ModelSignal, SignalWCache
+from qlib.backtest.signal import SignalWCache
 from qlib.contrib.report.analysis_position.risk_analysis import get_monthly_return
 
 
@@ -73,7 +73,7 @@ def backtest_signal(signal, args):
         "backtest": {
             "start_time": f"{args.test_start}-01-01",
             "end_time": f"{args.test_end}-12-31",
-            "account": 100000000,
+            "account": 1000000,
             "benchmark": args.benchmark,
             "exchange_kwargs": {
                 "freq": "day",
@@ -195,11 +195,11 @@ def get_train_config(args):
         }
         input_size = 5
 
-    if args.loss_type == "br":
+    if "br" in args.loss_type:
         output_dim = 2 # regress with bayesian
-    elif args.loss_type == "cls":
+    elif "cls" in args.loss_type:
         output_dim = 5  # 5 class for price change
-    elif args.loss_type == "rgr" or args.loss_type == "mae":
+    elif "rgr" in args.loss_type or "mae" in args.loss_type:
         output_dim = 1  # regress the price directly
 
     task = {

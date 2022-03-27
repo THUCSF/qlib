@@ -546,6 +546,8 @@ class SimulatorExecutor(BaseExecutor):
 
         trade_start_time, _ = self.trade_calendar.get_step_time()
         execute_result = []
+        if self.verbose:
+            print(f"=> Trade day: {trade_start_time}")
 
         for order in self._get_order_iterator(trade_decision):
             # execute the order.

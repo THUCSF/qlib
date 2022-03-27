@@ -26,7 +26,7 @@ class RNNLearner(pl.LightningModule):
     def __init__(
         self,
         model,
-        loss_type="rgr",
+        loss_type="rgr-last",
         lr=0.001,
         weight_decay=1e-4,
     ):
@@ -55,13 +55,13 @@ class RNNLearner(pl.LightningModule):
         if input.shape[0] == 1 and len(input.shape) == 4:
             input = input[0]
             target = target[0]
-        pred = self.model(input)
-        #print(pred.min(), pred.max(), target.min(), target.max(), pred.shape, target.shape)
+        pred = self.model(input,
+            last_only=("last" in self.loss_type))
         loss = self.loss_fn(pred, target)
         for param_group in self.optim.param_groups:
             self.log("lr", float(param_group['lr']))
             break
-        return {"loss": loss, "y": target, "pred": pred}
+        return {"loss": loss, "y": target[-1], "pred": pred[-1]}
 
     def pred2score(self, pred):
         if "rgr" in self.loss_type or "mae" in self.loss_type:
@@ -78,25 +78,22 @@ class RNNLearner(pl.LightningModule):
         loss = 0
         if "rgr" in self.loss_type:
             loss = loss + torch.square(pred - label).mean()
-        elif "mae" in self.loss_type:
-            loss = loss + (pred - label).abs().mean()
-        elif "cls" in self.loss_type:
-            loss = loss + F.cross_entropy(pred, label[:, 1].long())
-        elif "br" in self.loss_type:  # beyesian regression
-            pred_y, pred_logvar = pred[:, :, :1], pred[:, :, 1:]
-            pred_std = torch.exp(pred_logvar * 0.5)
-            pred_var = torch.exp(pred_logvar)
-            const = math.log(2 * math.pi) / 2
-            loss = (torch.square(pred_y - label) / pred_var).mean() / 2 \
-                + torch.log(pred_std).mean() + const
+        #elif "mae" in self.loss_type:
+        #    loss = loss + (pred - label).abs().mean()
+        #elif "cls" in self.loss_type:
+        #    loss = loss + F.cross_entropy(pred, label[:, 1].long())
+        #elif "br" in self.loss_type:  # beyesian regression
+        #    pred_y, pred_logvar = pred[:, :, :1], pred[:, :, 1:]
+        #    pred_std = torch.exp(pred_logvar * 0.5)
+        #    pred_var = torch.exp(pred_logvar)
+        #    const = math.log(2 * math.pi) / 2
+        #    loss = (torch.square(pred_y - label) / pred_var).mean() / 2 \
+        #        + torch.log(pred_std).mean() + const
         return loss
 
     def configure_optimizers(self):
         self.optim = torch.optim.AdamW(self.model.parameters(),
                         lr=self.lr, weight_decay=self.weight_decay)
-        #self.sched = torch.optim.lr_scheduler.MultiStepLR(self.optim,
-        #    [1, 2, 5, 10], 0.5)
-        #self.sched = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optim, mode="max")
         self.sched = torch.optim.lr_scheduler.CosineAnnealingLR(
             self.optim, T_max=10, eta_min=1e-5)
         return {"optimizer": self.optim, "lr_scheduler": self.sched, "monitor": "train_loss"}
@@ -106,19 +103,20 @@ class RNNLearner(pl.LightningModule):
         preds, scores = [], []
         BS = 1024
         # pinned inputs
-        x = torch.Tensor(BS, ds.seq_len, len(ds.input_names)).cuda()
+        x = torch.Tensor(ds.seq_len, BS, len(ds.input_names)).cuda()
         values = torch.from_numpy(ds.df[ds.input_names].values)
         with torch.no_grad():
             for idx in tqdm(range(len(ds))):
                 st, ed = ds.sample_indice[idx]
-                x[idx % BS].copy_(values[st:ed], True)
+                x[:, idx % BS].copy_(values[st:ed], True)
                 if (idx + 1) % BS == 0:
                     preds.append(self.model(x).squeeze())
                     scores.append(self.pred2score(preds[-1]))
             if len(ds) % BS != 0:
-                preds.append(self.model(x[:len(ds) % BS]).squeeze())
+                preds.append(self.model(x[:, :len(ds) % BS]).squeeze())
                 scores.append(self.pred2score(preds[-1]))
-        target_indice = ds.sample_indice[:, 1] + ds.horizon - 1 # (N,)
+        # QLib uses current signal to buy the next bar's property
+        target_indice = ds.sample_indice[:, 1] + ds.horizon - 2 # (N,)
         insts = ds.df[ds.inst_index].values[target_indice]
         dates = ds.df[ds.time_index].values[target_indice]
         scores = torch.cat(scores).cpu().numpy()
@@ -155,8 +153,7 @@ class RNNLearner(pl.LightningModule):
             ys.append(100 + y[gt_indice[-Q:]].mean())
         preds = np.array(preds).astype("float32")
         ys = np.array(ys).astype("float32")
-        return preds.mean() - 100
-        #return (preds / ys - 1).mean() * 100
+        return ((ys - preds) / ys).mean()
 
     def training_epoch_end(self, outs):
         res = self._calc_metric(outs)
@@ -172,7 +169,7 @@ class RNNLearner(pl.LightningModule):
             input = input[0]
             target = target[0]
         pred = self.model(input)
-        return {"y": target, "pred": pred}
+        return {"y": target[-1], "pred": pred}
 
     def validation_step_end(self, outs):
         return outs
@@ -188,13 +185,11 @@ class RNN(torch.nn.Module):
         super().__init__()
         self.core_type = core_type
         if core_type == "LSTM":
-            self.core = torch.nn.LSTM(
-                batch_first=True,
-                **kwargs)
+            self.core = torch.nn.LSTM(**kwargs)
             self.fc_out = torch.nn.Linear(kwargs["hidden_size"], output_size)
         elif core_type == "MultiStreamLSTM":
             self.cores = torch.nn.ModuleList([torch.nn.LSTM(
-                batch_first=True, **kwargs) for _ in range(output_size)])
+                **kwargs) for _ in range(output_size)])
             self.fc_outs = torch.nn.ModuleList([torch.nn.Linear(
                 kwargs["hidden_size"], 1) for _ in range(output_size)])
 
@@ -202,16 +197,17 @@ class RNN(torch.nn.Module):
         if self.core_type == "LSTM":
             out, _ = self.core(x)
             if last_only:
-                return self.fc_out(out[:, -1:, :])
+                return self.fc_out(out[-1])
             else:
                 out = self.fc_out(out.view(-1, out.shape[-1]))
+                # (L, B, C)
                 return out.view(x.shape[0], x.shape[1], -1)
         elif self.core_type == "MultiStreamLSTM":
             pred = []
             for core, fc_out in zip(self.cores, self.fc_outs):
                 out, _ = core(x)
                 if last_only:
-                    pred.append(fc_out(out[:, -1, :]))
+                    pred.append(fc_out(out[-1]))
                 else:
                     out = fc_out(out.view(-1, out.shape[-1]))
                     pred.append(out.view(x.shape[0], x.shape[1], -1))
