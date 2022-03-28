@@ -87,7 +87,7 @@ if __name__ == "__main__":
     parser.add_argument("--market", default="csi300", type=str,
                         choices=["csi300", "main"])
     parser.add_argument("--train-start", default=2011, type=int)
-    parser.add_argument("--train-end", default=2014, type=int)
+    parser.add_argument("--train-end", default=2013, type=int)
     parser.add_argument("--repeat-ind", default=0, type=int,
                         help="The index of repeats (to distinguish different runs).")
     # architecture options
@@ -108,8 +108,8 @@ if __name__ == "__main__":
     parser.add_argument("--n-drop", default=5, type=int)
     parser.add_argument("--eval-only", default="0", type=str)
     parser.add_argument("--benchmark", default="SH000300", type=str)
-    parser.add_argument("--test-start", default=2015, type=int)
-    parser.add_argument("--test-end", default=2015, type=int)
+    parser.add_argument("--test-start", default=2014, type=int)
+    parser.add_argument("--test-end", default=2014, type=int)
     args = parser.parse_args()
     lib.set_cuda_devices(args.gpu_id)
 
@@ -214,12 +214,12 @@ if __name__ == "__main__":
     learner.cuda()
     st = f"{args.test_start-1}-6-1"
     ed = f"{args.test_start}-12-31"
-    test_df = [g[(g.datetime >= st) & (g.datetime <= ed)]
+    full_df = [g[(g.datetime >= st) & (g.datetime <= ed)]
                     for _, g in full_df.groupby("instrument")]
-    test_df = pd.concat(test_df)
-    test_df.reset_index(inplace=True)
-    test_df.drop(columns="index", inplace=True)
-    test_ds = TSDataset(test_df,
+    full_df = pd.concat(full_df)
+    full_df.reset_index(inplace=True)
+    full_df.drop(columns="index", inplace=True)
+    test_ds = TSDataset(full_df,
                 seq_len=args.seq_len, horizon=args.horizon,
                 target_names=target_names, input_names=tvcv_names)
     final_signals, best_signals, test_indice = [], [], []
@@ -233,7 +233,8 @@ if __name__ == "__main__":
         st = f"{args.test_start}-{i}-1"
         ed = f"{args.test_start}-{i+1}-1" if i < 12 else \
                             f"{args.test_start+1}-1-1"
-        mask = (st <= test_dates) & (test_dates < ed)
+        mask = (st <= test_dates) & (test_dates < ed) if i > 1 \
+            else (test_dates < ed)
         test_indice.append(idx[mask])
         test_scores, test_preds = test_scores[mask], test_preds[mask]
         final_signals.append(pd.Series(test_scores,
@@ -247,6 +248,7 @@ if __name__ == "__main__":
         test_scores, test_preds = test_scores[mask], test_preds[mask]
         best_signals.append(pd.Series(test_scores,
             [test_insts[mask], test_dates[mask]]))
+
     final_signals = pd.concat(final_signals)
     best_signals = pd.concat(best_signals)
     final_signals.index.set_names(["instrument", "datetime"], inplace=True)

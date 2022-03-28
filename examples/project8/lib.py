@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 
 from qlib.contrib.evaluate import my_risk_analysis
-from qlib.backtest import backtest
+from qlib.backtest import backtest, get_strategy_executor
 from qlib.backtest.signal import SignalWCache
 from qlib.contrib.report.analysis_position.risk_analysis import get_monthly_return
 
@@ -44,6 +44,49 @@ def torch2numpy(x):
     if type(x) is float:
         return x
     return x.detach().cpu().numpy()
+
+
+def instantiate_strategy_executor(signal, args):
+    port_analysis_config = {
+        "executor": {
+            "class": "SimulatorExecutor",
+            "module_path": "qlib.backtest.executor",
+            "kwargs": {
+                "verbose": True,
+                "time_per_step": "day",
+                "generate_portfolio_metrics": True,
+            },
+        },
+        "strategy": {
+            "class": "TopkDropoutStrategy",
+            "module_path": "qlib.contrib.strategy.signal_strategy",
+            "kwargs": {
+                "topk": args.top_k,
+                "n_drop": args.n_drop,
+                "signal": SignalWCache(signal)
+            },
+        },
+        "backtest": {
+            "start_time": f"{args.test_start}-01-01",
+            "end_time": f"{args.test_end}-12-31",
+            "account": 1000000,
+            "benchmark": args.benchmark,
+            "exchange_kwargs": {
+                "freq": "day",
+                "limit_threshold": 0.095,
+                "deal_price": "close",
+                "open_cost": 0.0005,
+                "close_cost": 0.0015,
+                "min_cost": 5,
+            },
+        },
+    }
+
+    trade_strategy, trade_executor = get_strategy_executor(
+        executor=port_analysis_config["executor"],
+        strategy=port_analysis_config["strategy"],
+        **port_analysis_config["backtest"])
+    return trade_strategy, trade_executor
 
 
 def backtest_signal(signal, args):

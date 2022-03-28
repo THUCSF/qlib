@@ -246,6 +246,7 @@ class TopkDropoutStrategy(BaseSignalStrategy):
                     if cash != cash:
                         print(f"=> Sell {code} with {sell_amount} at {trade_start_time} | {trade_val} | cash: {cash}")
                         raise ValueError
+
         # buy new stock
         # note the current has been changed
         current_stock_list = current_temp.get_stock_list()

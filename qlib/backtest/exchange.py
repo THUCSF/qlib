@@ -9,6 +9,7 @@ if TYPE_CHECKING:
     from .account import Account
 
 from qlib.backtest.position import BasePosition, Position
+from qlib.utils.index_data import SingleData
 import random
 import numpy as np
 import pandas as pd
@@ -336,6 +337,8 @@ class Exchange:
             # So for conveniency, let's use zero volume
             no_close = self.quote.get_data(stock_id, start_time, end_time, "$close") is None
             volume = self.quote.get_data(stock_id, start_time, end_time, "$volume")
+            if isinstance(volume, SingleData):
+                volume = volume[0]
             zero_volume = (volume is None) or (volume < 1e-4)
             return no_close or zero_volume
         else:

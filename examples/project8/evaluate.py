@@ -2,21 +2,17 @@
 """
 # pylint: disable=wrong-import-position,multiple-imports,import-error,invalid-name,line-too-long
 import json, copy, argparse, os, torch, sys, glob
-import pytorch_lightning.loggers as pl_logger
-import pytorch_lightning as pl
 import matplotlib.pyplot as plt
 import matplotlib
 import pandas as pd
 import numpy as np
-from tqdm import tqdm
-from torch.utils.data import DataLoader
-from pytorch_lightning.callbacks import ModelCheckpoint
 sys.path.insert(0, "../..")
 import qlib, lib
-from lib import torch2numpy
-from dataset import AlignedTSDataset, TSDataset
+from lib import instantiate_strategy_executor
+from dataset import TSDataset
 from qlib.utils import init_instance_by_config
 from qlib.config import REG_CN
+from datetime import timedelta
 matplotlib.style.use('seaborn-poster')
 matplotlib.style.use('ggplot')
 
@@ -87,7 +83,7 @@ if __name__ == "__main__":
     parser.add_argument("--market", default="main", type=str,
                         choices=["csi300", "main"])
     parser.add_argument("--train-start", default=2011, type=int)
-    parser.add_argument("--train-end", default=2014, type=int)
+    parser.add_argument("--train-end", default=2013, type=int)
     parser.add_argument("--repeat-ind", default=0, type=int,
                         help="The index of repeats (to distinguish different runs).")
     # architecture options
@@ -108,8 +104,8 @@ if __name__ == "__main__":
     parser.add_argument("--n-drop", default=5, type=int)
     parser.add_argument("--eval-only", default="0", type=str)
     parser.add_argument("--benchmark", default="SH000300", type=str)
-    parser.add_argument("--test-start", default=2015, type=int)
-    parser.add_argument("--test-end", default=2015, type=int)
+    parser.add_argument("--test-start", default=2014, type=int)
+    parser.add_argument("--test-end", default=2014, type=int)
     args = parser.parse_args()
     lib.set_cuda_devices(args.gpu_id)
 
@@ -205,7 +201,7 @@ if __name__ == "__main__":
         learner.predict_dataset(train_ds)
     train_gt = train_ds.df[train_ds.target_names].values
     train_gt = train_gt[train_indice].squeeze()
-    if args.loss_type == "br":
+    if "br" in args.loss_type:
         plot_br([train_scores, test_scores],
                 [train_preds, test_preds],
                 [train_gt, test_gt],
