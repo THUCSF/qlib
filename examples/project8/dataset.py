@@ -10,7 +10,7 @@ from torch.utils.data import Dataset
 def calc_sample_indice(df, req_len, time_index, inst_index):
     trade_dates = df[time_index].unique() # array
     trade_dates.sort()
-    num = len(trade_dates) - req_len
+    num = len(trade_dates) - req_len + 1
     sample_indice = [[] for _ in range(num)]
     for _, inst in tqdm(df.groupby(inst_index)):
         inst_date = inst[time_index]
@@ -50,9 +50,9 @@ class AlignedTSTensorDataset(Dataset):
         day_indice = self.sample_indice[day_index]
         st_idx, ed_idx = day_indice[0]
         target_len = len(self.target_names)
-        x = torch.stack([self.data[st:ed-self.horizon, :-target_len]
+        x = torch.stack([self.data[st:ed, :-target_len]
                     for st, ed in day_indice], 1)
-        y = torch.stack([self.data[st+self.horizon:ed, -target_len:]
+        y = torch.stack([self.data[st:ed, -target_len:]
                     for st, ed in day_indice], 1)
         return {
             "input": x,
@@ -114,9 +114,9 @@ class TSDataset(Dataset):
         for idx in range(self.INST.shape[0]):
             L = self.INST.iloc[idx]["count"]
             g_idx = self.INST.iloc[idx]["start"]
-            if L > seq_len - horizon:
+            if L >= seq_len:
                 indice.extend([(g_idx + offset, g_idx + offset + seq_len)
-                    for offset in range(L - seq_len - horizon)])
+                    for offset in range(L - seq_len + 1)])
         self.sample_indice = np.array(indice)
 
     def describe(self):
@@ -130,10 +130,11 @@ class TSDataset(Dataset):
         return self.sample_indice.shape[0]
 
     def __getitem__(self, index):
+        """Note that the DataLoader will put the batch dimension on 0-axis."""
         st, ed = self.sample_indice[index]
         target_len = len(self.target_names)
         x = self.data[st:ed, :-target_len]
-        y = self.data[ed:ed+self.horizon, -target_len:]
+        y = self.data[st:ed, -target_len:]
 
         return {
             "input": x,

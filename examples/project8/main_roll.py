@@ -179,6 +179,37 @@ if __name__ == "__main__":
     torch.save(model.state_dict(),
         f"{model_dir}/{model_name}/{model_prefix}_final.pth")
 
+    for i in range(1, 13): # for now, roll only in one year
+        test_start_date = f"{args.test_start}-{i}-1"
+        test_end_date = f"{args.test_start}-{i+1}-1" if i < 12 else \
+                            f"{args.test_start+1}-1-1"
+        train_end_date = test_start_date if args.strict_validation \
+                            else test_end_date
+        train_ds = full_ds.get_split(
+                        f"{args.train_start}-1-1", train_end_date)
+        val_ds = full_ds.get_split(
+                    test_start_date, test_end_date)
+        print("=> Training dataset:")
+        train_ds.describe()
+        print("=> Validation dataset:")
+        val_ds.describe()
+        model_prefix = f"model_y{args.test_start}_m{i+1:02d}"
+        mc = ModelCheckpoint(save_weights_only=True,
+            dirpath=f"{model_dir}/{model_name}",
+            filename=model_prefix + "_n={epoch}_f={val_metric:.2f}",
+            monitor="val_metric", mode="max")
+        train_dl = DataLoader(train_ds, batch_size=1, shuffle=True)
+        val_dl = DataLoader(val_ds, batch_size=1, shuffle=False)
+        trainer = pl.Trainer(
+            max_epochs=args.n2_epoch,
+            gpus=1,
+            log_every_n_steps=1,
+            callbacks=[mc],
+            logger=logger)
+        trainer.fit(learner, train_dl, val_dl)
+        torch.save(model.state_dict(),
+            f"{model_dir}/{model_name}/{model_prefix}_final.pth")
+
     learner.cuda()
     st = f"{args.test_start-1}-6-1"
     ed = f"{args.test_start}-12-31"
@@ -191,20 +222,31 @@ if __name__ == "__main__":
                 seq_len=args.seq_len, horizon=args.horizon,
                 target_names=target_names, input_names=tvcv_names)
     final_signals, best_signals, test_indice = [], [], []
+    for i in range(1, 13):
+        model_path = f"{model_dir}/{model_name}/model_y{args.test_start}_m{i:02d}"
+        # final model
+        model.load_state_dict(torch.load(f"{model_path}_final.pth"))
+        test_scores, test_preds, test_insts, test_dates, idx = \
+            learner.predict_dataset(test_ds)
+        test_dates = pd.Series(test_dates)
+        st = f"{args.test_start}-{i}-1"
+        ed = f"{args.test_start}-{i+1}-1" if i < 12 else \
+                            f"{args.test_start+1}-1-1"
+        mask = (st <= test_dates) & (test_dates < ed) if i > 1 \
+            else (test_dates < ed)
+        test_indice.append(idx[mask])
+        test_scores, test_preds = test_scores[mask], test_preds[mask]
+        final_signals.append(pd.Series(test_scores,
+            [test_insts[mask], test_dates[mask]]))
 
-    model_path = f"{model_dir}/{model_name}/model_y{args.test_start}_m01"
-    # final model
-    model.load_state_dict(torch.load(f"{model_path}_final.pth"))
-    test_scores, test_preds, test_insts, test_dates, test_indice = \
-        learner.predict_dataset(test_ds)
-    test_dates = pd.Series(test_dates)
-    final_signals.append(pd.Series(test_scores, [test_insts, test_dates]))
-    # best model
-    best_model_path = glob.glob(f"{model_path}_n=*.ckpt")[0]
-    learner.load_state_dict(torch.load(best_model_path)["state_dict"])
-    test_scores, test_preds, _, _, _ = \
-        learner.predict_dataset(test_ds)
-    best_signals.append(pd.Series(test_scores, [test_insts, test_dates]))
+        # best model
+        best_model_path = glob.glob(f"{model_path}_n=*.ckpt")[0]
+        learner.load_state_dict(torch.load(best_model_path)["state_dict"])
+        test_scores, test_preds, _, _, _ = \
+            learner.predict_dataset(test_ds)
+        test_scores, test_preds = test_scores[mask], test_preds[mask]
+        best_signals.append(pd.Series(test_scores,
+            [test_insts[mask], test_dates[mask]]))
 
     final_signals = pd.concat(final_signals)
     best_signals = pd.concat(best_signals)
@@ -217,8 +259,9 @@ if __name__ == "__main__":
     test_indice = np.concatenate(test_indice)
     test_gt = test_ds.df[test_ds.target_names].values[test_indice].squeeze()
 
-    train_df = pd.concat([g[g.datetime <= f"{args.train_end}-12-31"]
-                    for _, g in full_df.groupby("instrument")])
+    train_df = [g[g.datetime <= f"{args.train_end}-12-31"]
+                    for _, g in full_df.groupby("instrument")]
+    train_df = pd.concat(train_df)
     train_df.reset_index(inplace=True)
     train_df.drop(columns="index", inplace=True)
     train_ds = TSDataset(train_df,

@@ -106,7 +106,7 @@ class RNNLearner(pl.LightningModule):
         return {"optimizer": self.optim, "lr_scheduler": self.sched, "monitor": "train_loss"}
 
     def predict_dataset(self, ds):
-        """Predict scores from a dataset."""
+        """Predict scores from a dataset. Need the sample indice from ds."""
         preds, scores = [], []
         BS = 1024
         # pinned inputs
