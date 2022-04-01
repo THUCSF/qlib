@@ -59,8 +59,6 @@ class SignalWCache(Signal):
         # so resampling from the data is necessary
         # the latest signal leverage more recent data and therefore is used in trading.
         signal = resam_ts_data(self.signal_cache, start_time=start_time, end_time=end_time, method="last")
-        print(start_time, end_time)
-        print(signal)
         return signal
 
 

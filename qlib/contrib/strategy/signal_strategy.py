@@ -124,7 +124,7 @@ class TopkDropoutStrategy(BaseSignalStrategy):
         pred_score = self.signal.get_signal(start_time=pred_start_time, end_time=pred_end_time)
         # NOTE: the current version of topk dropout strategy can't handle pd.DataFrame(multiple signal)
         # So it only leverage the first col of signal
-        print(trade_start_time, trade_end_time, pred_start_time, pred_end_time)
+        #print(trade_start_time, trade_end_time, pred_start_time, pred_end_time)
         if isinstance(pred_score, pd.DataFrame):
             pred_score = pred_score.iloc[:, 0]
         if pred_score is None:
@@ -279,8 +279,8 @@ class TopkDropoutStrategy(BaseSignalStrategy):
                 raise ValueError
             buy_order_list.append(buy_order)
         decisions = TradeDecisionWO(sell_order_list + buy_order_list, self)
-        print(pred_score.min(), pred_score.max())
-        print(decisions)
+        #print(pred_score.min(), pred_score.max())
+        #print(decisions)
         return decisions
 
 

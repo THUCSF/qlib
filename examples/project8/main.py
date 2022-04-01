@@ -56,7 +56,7 @@ def plot_normal(xs, ys, model_dir, model_name, subfix="final"):
 def fetch_label(label_type):
     """Get label expression from type."""
     if label_type == "pc-1":
-        return "100 * (Ref($close,-2)/Ref($close,-1) - 1)"
+        return "100 * (Ref($close,-1)/$close - 1)"
 
 
 def df_to_tsdf(df):
@@ -71,7 +71,7 @@ def df_to_tsdf(df):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # training options
-    parser.add_argument("--strict-validation", default=1, type=int,
+    parser.add_argument("--strict-validation", default=0, type=int,
                         help="Whether to ensure strict validation set.")
     parser.add_argument("--n1-epoch", default=50, type=int,
                         help="The total initial training epochs.")
@@ -91,12 +91,11 @@ if __name__ == "__main__":
     parser.add_argument("--repeat-ind", default=0, type=int,
                         help="The index of repeats (to distinguish different runs).")
     # architecture options
-    parser.add_argument("--hidden-size", default=256, type=int)
-    parser.add_argument("--n-layer", default=1, type=int,
+    parser.add_argument("--hidden-size", default=128, type=int)
+    parser.add_argument("--n-layer", default=2, type=int,
                         help="The number of hidden layers.")
-    parser.add_argument("--loss-type", default="rgr", type=str,
-                        help="The type of loss function and output format. rgr - regression; cls - classification; br - bayesian regression; mae - mean absolute error",
-                        choices=["rgr", "mae", "cls", "br"])
+    parser.add_argument("--loss-type", default="rgr-last", type=str,
+                        help="The type of loss function and output format. rgr - regression; cls - classification; br - bayesian regression; mae - mean absolute error")
     parser.add_argument("--data-type", default="raw", type=str,
                         help="The data type and preprocessing method.",
                         choices=["raw", "zscorenorm", "alpha158"])

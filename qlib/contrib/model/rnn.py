@@ -55,13 +55,21 @@ class RNNLearner(pl.LightningModule):
         if input.shape[0] == 1 and len(input.shape) == 4:
             input = input[0]
             target = target[0]
-        pred = self.model(input,
-            last_only=("last" in self.loss_type))
-        loss = self.loss_fn(pred, target)
+        if "last" in self.loss_type:
+            pred = self.model(input)
+            loss = self.loss_fn(pred, target[-1])
+        else:
+            pred = self.model(input, last_only=False)
+            loss = self.loss_fn(pred, target)
+            pred = pred[-1]
+        target = target[-1]
         for param_group in self.optim.param_groups:
             self.log("lr", float(param_group['lr']))
             break
-        return {"loss": loss, "y": target[-1], "pred": pred[-1]}
+        return {
+            "loss": loss,
+            "y": target.cpu(),
+            "pred": pred.cpu()}
 
     def pred2score(self, pred):
         if "rgr" in self.loss_type or "mae" in self.loss_type:
@@ -72,30 +80,29 @@ class RNNLearner(pl.LightningModule):
             return vals + pred_labels
         elif "br" in self.loss_type:
             # mu - std: 85% chance lower bound
-            return pred[:, 0] - torch.exp(pred[:, 1] / 2)
+            return pred[-1, :, 0] - torch.exp(pred[-1, :, 1] / 2)
 
     def loss_fn(self, pred, label):
         loss = 0
         if "rgr" in self.loss_type:
             loss = loss + torch.square(pred - label).mean()
-        #elif "mae" in self.loss_type:
-        #    loss = loss + (pred - label).abs().mean()
+        elif "mae" in self.loss_type:
+            loss = loss + (pred - label).abs().mean()
+        elif "br" in self.loss_type:  # beyesian regression
+            pred_y, pred_logvar = pred[:, :, :1], pred[:, :, 1:]
+            pred_var = torch.exp(pred_logvar)
+            const = math.log(2 * math.pi) / 2
+            loss = (torch.square(pred_y - label) / pred_var).mean() / 2 \
+                + 0.5 * torch.log(pred_var).mean() + const
         #elif "cls" in self.loss_type:
         #    loss = loss + F.cross_entropy(pred, label[:, 1].long())
-        #elif "br" in self.loss_type:  # beyesian regression
-        #    pred_y, pred_logvar = pred[:, :, :1], pred[:, :, 1:]
-        #    pred_std = torch.exp(pred_logvar * 0.5)
-        #    pred_var = torch.exp(pred_logvar)
-        #    const = math.log(2 * math.pi) / 2
-        #    loss = (torch.square(pred_y - label) / pred_var).mean() / 2 \
-        #        + torch.log(pred_std).mean() + const
         return loss
 
     def configure_optimizers(self):
         self.optim = torch.optim.AdamW(self.model.parameters(),
                         lr=self.lr, weight_decay=self.weight_decay)
         self.sched = torch.optim.lr_scheduler.CosineAnnealingLR(
-            self.optim, T_max=10, eta_min=1e-5)
+            self.optim, T_max=5, eta_min=1e-5)
         return {"optimizer": self.optim, "lr_scheduler": self.sched, "monitor": "train_loss"}
 
     def predict_dataset(self, ds):
@@ -149,11 +156,11 @@ class RNNLearner(pl.LightningModule):
             pred_indice = pred.argsort()
             gt_indice = y.argsort()
             Q = min(50, int(pred.shape[0] * 0.1))
-            preds.append(100 + y[pred_indice[-Q:]].mean())
-            ys.append(100 + y[gt_indice[-Q:]].mean())
+            preds.append(y[pred_indice[-Q:]].mean())
+            ys.append(y[gt_indice[-Q:]].mean())
         preds = np.array(preds).astype("float32")
         ys = np.array(ys).astype("float32")
-        return ((ys - preds) / ys).mean()
+        return (ys - preds).mean()
 
     def training_epoch_end(self, outs):
         res = self._calc_metric(outs)
@@ -198,10 +205,7 @@ class RNN(torch.nn.Module):
             out, _ = self.core(x)
             if last_only:
                 return self.fc_out(out[-1])
-            else:
-                out = self.fc_out(out.view(-1, out.shape[-1]))
-                # (L, B, C)
-                return out.view(x.shape[0], x.shape[1], -1)
+            return self.fc_out(out)
         elif self.core_type == "MultiStreamLSTM":
             pred = []
             for core, fc_out in zip(self.cores, self.fc_outs):
