@@ -20,11 +20,15 @@ if not os.path.exists("data/china_stock_csv_adj"):
 # copy CSI300 to the data directory
 os.system("cp data/SH000300.csv data/china_stock_csv_adj")
 
-print("=> Converting CSV file")
+print("=> Reading CSV file")
 df = pd.read_csv("data/wind_daily_stock.csv")
-for key in ["open", "high", "low", "close"]:
-    df.drop(columns=key)
-    df.rename({f"adj{key}" : key})
+print("=> Converting CSV file")
+feature_names = ["open", "high", "low", "close"]
+df.rename(columns={key : f"real_{key}" for key in feature_names},
+    inplace=True)
+df.rename(columns={f"adj{key}" : key for key in feature_names},
+    inplace=True)
+print(df.columns)
 for symbol, cdf in df.groupby("code"):
     symbol, ex = symbol.split(".")
     name = f"{ex}{symbol}"

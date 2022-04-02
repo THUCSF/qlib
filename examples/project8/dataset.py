@@ -69,14 +69,13 @@ class AlignedTSDataset(object):
                  input_names=None, target_names=None):
         self.df = df
         self.data = torch.from_numpy(df[input_names + target_names].values)
-        req_len = seq_len + horizon
         self.time_index = time_index
         self.inst_index = inst_index
         self.input_names = input_names
         self.target_names = target_names
         self.horizon = horizon
         self.trade_dates, self.sample_indice = calc_sample_indice(
-            df, req_len, time_index, inst_index)
+            df, seq_len, time_index, inst_index)
         self.trade_dates = pd.Series(self.trade_dates)
 
     def get_split(self, start_date, end_date):

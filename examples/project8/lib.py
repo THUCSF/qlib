@@ -99,7 +99,7 @@ def backtest_signal(signal, args):
             "class": "SimulatorExecutor",
             "module_path": "qlib.backtest.executor",
             "kwargs": {
-                "verbose": False,
+                "verbose": args.verbose,
                 "time_per_step": "day",
                 "generate_portfolio_metrics": True,
             },
@@ -255,7 +255,7 @@ def get_train_config(args):
                 "output_size": output_dim,
                 "hidden_size": args.hidden_size,
                 "num_layers": args.n_layer,
-                "dropout": 0
+                "dropout": 0.5
             },
         },
         "learner": {
@@ -264,7 +264,7 @@ def get_train_config(args):
             "kwargs": {
                 "loss_type": args.loss_type,
                 "lr": 0.001,
-                "weight_decay": 0.0001
+                "weight_decay": 1e-4
             },
         },
         "dataset": {

@@ -573,4 +573,6 @@ class SimulatorExecutor(BaseExecutor):
                         self.trade_account.get_cash(),
                     )
                 )
+        if self.verbose:
+            input()
         return execute_result, {"trade_info": execute_result}
