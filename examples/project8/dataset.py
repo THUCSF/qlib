@@ -22,6 +22,10 @@ def calc_sample_indice(df, req_len, time_index, inst_index):
                 continue
             st, ed = inst.index[j], inst.index[j+req_len]
             sample_indice[i].append((st, ed))
+    while len(sample_indice[-1]) == 0:
+        del sample_indice[-1]
+        del trade_dates[-1]
+    num = len(sample_indice)
     return trade_dates[-num:], sample_indice
 
 
