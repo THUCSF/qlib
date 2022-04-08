@@ -1,19 +1,17 @@
 """Get the stocks in main board.
 """
-import os
-import pandas as pd
+import glob
 import time
+from tqdm import tqdm
+import pandas as pd
+
 
 subdate_func = lambda x : \
     time.strftime("%Y-%m-%d", time.strptime(x, "%Y%m%d"))
 
-print("=> Reading CSV file")
-df = pd.read_csv("data/wind_daily_stock.csv")
-print("=> Searching for main board stocks")
-for val, main_df in df.groupby("class"):
-    break
+csv_files = glob.glob("data/data_min/*.csv")
+csv_files.sort()
 f = open("data/china_stock_qlib_adj/instruments/main.txt", "w")
-print("=> Getting date range of stocks")
 for code, stock_df in main_df.groupby("code"):
     symbol, ex = code.split(".")
     name = f"{ex}{symbol}"

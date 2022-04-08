@@ -12,8 +12,7 @@ from ...data.dataset.handler import DataHandlerLP
 
 
 def collate_step_outputs(outs):
-    """Collate the step outputs (y and pred) into an array.
-    """
+    """Collate the step outputs (y and pred) into an array."""
     N = len(outs)
     y, pred = [], []
     for i in range(N):
@@ -45,7 +44,8 @@ class RNNLearner(pl.LightningModule):
             "pred": self.model(input),
             "target_time_start": batch["target_time_start"],
             "target_time_end": batch["target_time_end"],
-            "instance": batch["instance"]}
+            "instance": batch["instance"],
+        }
         if "target" in batch:
             info["gt"] = batch["target"]
         return info
@@ -64,12 +64,9 @@ class RNNLearner(pl.LightningModule):
             pred = pred[-1]
         target = target[-1]
         for param_group in self.optim.param_groups:
-            self.log("lr", float(param_group['lr']))
+            self.log("lr", float(param_group["lr"]))
             break
-        return {
-            "loss": loss,
-            "y": target.cpu(),
-            "pred": pred.cpu()}
+        return {"loss": loss, "y": target.detach().cpu(), "pred": pred.detach().cpu()}
 
     def pred2score(self, pred):
         if "rgr" in self.loss_type or "mae" in self.loss_type:
@@ -92,18 +89,27 @@ class RNNLearner(pl.LightningModule):
             pred_y, pred_logvar = pred[:, :, :1], pred[:, :, 1:]
             pred_var = torch.exp(pred_logvar)
             const = math.log(2 * math.pi) / 2
-            loss = (torch.square(pred_y - label) / pred_var).mean() / 2 \
-                + 0.5 * torch.log(pred_var).mean() + const
-        #elif "cls" in self.loss_type:
+            loss = (
+                (torch.square(pred_y - label) / pred_var).mean() / 2
+                + 0.5 * torch.log(pred_var).mean()
+                + const
+            )
+        # elif "cls" in self.loss_type:
         #    loss = loss + F.cross_entropy(pred, label[:, 1].long())
         return loss
 
     def configure_optimizers(self):
-        self.optim = torch.optim.AdamW(self.model.parameters(),
-                        lr=self.lr, weight_decay=self.weight_decay)
+        self.optim = torch.optim.AdamW(
+            self.model.parameters(), lr=self.lr, weight_decay=self.weight_decay
+        )
         self.sched = torch.optim.lr_scheduler.CosineAnnealingLR(
-            self.optim, T_max=5, eta_min=1e-5)
-        return {"optimizer": self.optim, "lr_scheduler": self.sched, "monitor": "train_loss"}
+            self.optim, T_max=5, eta_min=1e-5
+        )
+        return {
+            "optimizer": self.optim,
+            "lr_scheduler": self.sched,
+            "monitor": "train_loss",
+        }
 
     def predict_dataset(self, ds):
         """Predict scores from a dataset. Need the sample indice from ds."""
@@ -121,10 +127,10 @@ class RNNLearner(pl.LightningModule):
                     preds.append(self.model(x).squeeze())
                     scores.append(self.pred2score(preds[-1]))
             if len(ds) % BS != 0:
-                preds.append(self.model(x[:, :len(ds) % BS]).squeeze())
+                preds.append(self.model(x[:, : len(ds) % BS]).squeeze())
                 scores.append(self.pred2score(preds[-1]))
         # QLib uses current signal to buy the next bar's property
-        target_indice = ds.sample_indice[:, 1] + ds.horizon - 2 # (N,)
+        target_indice = ds.sample_indice[:, 1] + ds.horizon - 2  # (N,)
         insts = ds.df[ds.inst_index].values[target_indice]
         dates = ds.df[ds.time_index].values[target_indice]
         scores = torch.cat(scores).cpu().numpy()
@@ -177,7 +183,7 @@ class RNNLearner(pl.LightningModule):
             input = input[0]
             target = target[0]
         pred = self.model(input)
-        return {"y": target[-1], "pred": pred}
+        return {"y": target[-1].detach().cpu(), "pred": pred.detach().cpu()}
 
     def validation_step_end(self, outs):
         return outs
@@ -196,10 +202,12 @@ class RNN(torch.nn.Module):
             self.core = torch.nn.LSTM(**kwargs)
             self.fc_out = torch.nn.Linear(kwargs["hidden_size"], output_size)
         elif core_type == "MultiStreamLSTM":
-            self.cores = torch.nn.ModuleList([torch.nn.LSTM(
-                **kwargs) for _ in range(output_size)])
-            self.fc_outs = torch.nn.ModuleList([torch.nn.Linear(
-                kwargs["hidden_size"], 1) for _ in range(output_size)])
+            self.cores = torch.nn.ModuleList(
+                [torch.nn.LSTM(**kwargs) for _ in range(output_size)]
+            )
+            self.fc_outs = torch.nn.ModuleList(
+                [torch.nn.Linear(kwargs["hidden_size"], 1) for _ in range(output_size)]
+            )
 
     def forward(self, x, last_only=True):
         if self.core_type == "LSTM":

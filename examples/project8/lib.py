@@ -1,14 +1,64 @@
 """The helper functions.
 """
-import torch
+import json
 import os
+import torch
 import numpy as np
-import pandas as pd
 
 from qlib.contrib.evaluate import my_risk_analysis
 from qlib.backtest import backtest, get_strategy_executor
 from qlib.backtest.signal import SignalWCache
 from qlib.contrib.report.analysis_position.risk_analysis import get_monthly_return
+
+
+def organize_results(final_res, final_month_res, final_report, best_res=None, best_month_res=None, best_report=None):
+    month_ret_key = "return_total_return"
+    month_er_key = "excess_return_without_cost_total_return"
+    month_bench_key = "bench_return_total_return"
+    eval_result = {
+        "benchmark": {
+            "R": float(final_res["benchmark"].risk["annualized_return"]),
+            "monthly_return": final_month_res[month_bench_key].to_dict(),
+            "daily_return": {k.strftime("%Y-%m-%d"): v
+                for k, v in final_report["bench"].to_dict().items()}
+        },
+        "final": {
+            "ER": float(final_res["ER"].risk["annualized_return"]),
+            "ERC": float(final_res["ERC"].risk["annualized_return"]),
+            "monthly_return": final_month_res[month_ret_key].to_dict(),
+            "monthly_ER": final_month_res[month_er_key].to_dict(),
+            "daily_return": {
+                k.strftime("%Y-%m-%d"): v
+                for k, v in final_report["return"].to_dict().items()
+            },
+        },
+    }
+    if best_res:
+        eval_result["best"] = {
+            "ER": float(best_res["ER"].risk["annualized_return"]),
+            "ERC": float(best_res["ERC"].risk["annualized_return"]),
+            "monthly_return": best_month_res[month_ret_key].to_dict(),
+            "monthly_ER": best_month_res[month_er_key].to_dict(),
+            "daily_return": {
+                k.strftime("%Y-%m-%d"): v
+                for k, v in best_report["return"].to_dict().items()
+            },
+        }
+    return eval_result
+
+
+def save_results(save_path, task, final_res, final_month_res, final_report, best_res=None, best_month_res=None, best_report=None):
+    eval_result = organize_results(
+        final_res, final_month_res, final_report, best_res, best_month_res, best_report
+    )
+    config = {
+        "learner_config": task["learner"],
+        "model_config": task["model"],
+        "dataset_config": task["dataset"]}
+    with open(f"{save_path}/config.json", "w", encoding="ascii") as f:
+        json.dump(config, f, indent=2)
+    with open(f"{save_path}/result.json", "w", encoding="ascii") as f:
+        json.dump(eval_result, f, indent=2)
 
 
 def set_cuda_devices(device_ids, use_cuda=True):

@@ -230,38 +230,13 @@ if __name__ == "__main__":
                     [train_gt, test_gt],
                     model_dir, model_name)
 
-    # write json
-    month_ret_key = 'return_total_return'
-    month_er_key = 'excess_return_without_cost_total_return'
-    month_bench_key = 'bench_return_total_return'
-    eval_result = {
-        "benchmark": {
-            "R": float(best_res['benchmark'].risk['annualized_return']),
-            "monthly_return": best_month_res[month_bench_key].to_dict()
-        },
-        "best": {
-            "ER": float(best_res['ER'].risk['annualized_return']),
-            "ERC": float(best_res['ERC'].risk['annualized_return']),
-            "monthly_return": best_month_res[month_ret_key].to_dict(),
-            "monthly_ER": best_month_res[month_er_key].to_dict(),
-            "daily_return": {k.strftime("%Y-%m-%d"): v
-                for k, v in best_report["return"].to_dict().items()}
-        },
-        #"final": {
-        #    "ER": float(final_res['ER'].risk['annualized_return']),
-        #    "ERC": float(final_res['ERC'].risk['annualized_return']),
-        #    "monthly_return": final_month_res[month_ret_key].to_dict(),
-        #    "monthly_ER": final_month_res[month_er_key].to_dict(),
-        #    "daily_return": {k.strftime("%Y-%m-%d"): v
-        #        for k, v in final_report["return"].to_dict().items()}
-        #}
-        }
-    config = {
-        "learner_config": task["learner"],
-        "model_config": task["model"],
-        "dataset_config": task["dataset"]}
-    path = f"{model_dir}/{model_name}"
-    with open(f"{path}/config.json", "w", encoding="ascii") as f:
-        json.dump(config, f, indent=2)
-    with open(f"{path}/result.json", "w", encoding="ascii") as f:
-        json.dump(eval_result, f, indent=2)
+    lib.save_results(
+        f"{model_dir}/{model_name}",
+        task,
+        final_res,
+        final_month_res,
+        final_report,
+        best_res,
+        best_month_res,
+        best_report,
+    )
