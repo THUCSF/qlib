@@ -93,7 +93,7 @@ if __name__ == "__main__":
     parser.add_argument("--repeat-ind", default=0, type=int,
                         help="The index of repeats (to distinguish different runs).")
     # architecture options
-    parser.add_argument("--hidden-size", default=128, type=int)
+    parser.add_argument("--hidden-size", default=256, type=int)
     parser.add_argument("--n-layer", default=2, type=int,
                         help="The number of hidden layers.")
     parser.add_argument("--loss-type", default="rgr-all", type=str,

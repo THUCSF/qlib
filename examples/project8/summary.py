@@ -144,89 +144,73 @@ def plot_daily(model_repeats, prefix):
 
 
 def main():
-    label_type = "pc-1"
-    for market in ["csi300", "main"]:
-        for data_type in ["raw"]:
-            expr_dir = f"{args.expr}/{market}_{data_type}_{label_type}"
-            model_dirs = glob.glob(f"{expr_dir}/*")
-            model_dirs.sort()
-            model_dirs = [m for m in model_dirs if "." not in m]
-            res_dic = {}
-            for model_dir in model_dirs:
-                model_name = model_dir[model_dir.rfind("/") + 1 :]
-                loss_type, layer = model_name.split("_")  # e.g. br_l1_w32
-                if loss_type not in res_dic:
-                    res_dic[loss_type] = {}
-                layer = layer[1:]
-                model_repeat_dirs = glob.glob(f"{model_dir}/*")
-                model_repeat_dirs.sort()
-                for mrd in model_repeat_dirs:
-                    mr_name = mrd[mrd.rfind("/") + 1 :]
-                    repeat_ind, data_range = mr_name.split("_")
-                    repeat_ind = repeat_ind[1:]
-                    data_range = data_range[1:]
-                    if data_range not in res_dic[loss_type]:
-                        res_dic[loss_type][data_range] = []
-                    try:
-                        with open(f"{mrd}/result.json", "r") as f:
-                            res = json.load(f)
-                    except:
-                        print(f"!> Not found: {mrd}/result.json")
-                        continue
-                    res_dic[loss_type][data_range].append(res)
+    model_dirs = glob.glob(f"{args.expr}/*")
+    model_dirs.sort()
+    model_dirs = [m for m in model_dirs if "." not in m]
+    res_dic = {}
+    for model_dir in model_dirs:
+        model_name = model_dir[model_dir.rfind("/") + 1 :]
+        loss_type, layer = model_name.split("_")  # e.g. br_l1_w32
+        if loss_type not in res_dic:
+            res_dic[loss_type] = {}
+        layer = layer[1:]
+        model_repeat_dirs = glob.glob(f"{model_dir}/*")
+        model_repeat_dirs.sort()
+        for mrd in model_repeat_dirs:
+            mr_name = mrd[mrd.rfind("/") + 1 :]
+            repeat_ind, data_range = mr_name.split("_")
+            repeat_ind = repeat_ind[1:]
+            data_range = data_range[1:]
+            if data_range not in res_dic[loss_type]:
+                res_dic[loss_type][data_range] = []
+            try:
+                with open(f"{mrd}/result.json", "r") as f:
+                    res = json.load(f)
+            except:
+                print(f"!> Not found: {mrd}/result.json")
+                continue
+            res_dic[loss_type][data_range].append(res)
 
-            num_dic = {"final": {}, "best": {}}
-            for loss_type, loss_dic in res_dic.items():
-                for data_range, data_dic in loss_dic.items():
-                    for stop_strategy in ["final", "best"]:
-                        model_repeats = [m[stop_strategy] for m in data_dic]
-                        if len(model_repeats) == 0:
-                            print(f"!> {loss_type} {data_range} is empty!")
-                            continue
-                        save_prefix = (
-                            f"{expr_dir}/{loss_type}_{data_range}_{stop_strategy}"
-                        )
-                        # plot_monthly(model_repeats, save_prefix)
-                        plot_daily(model_repeats, save_prefix)
-                        set_dic(
-                            num_dic,
-                            stop_strategy,
-                            loss_type,
-                            data_range,
-                            [m["ER"] for m in model_repeats],
-                        )
-
+    num_dic = {"final": {}, "best": {}}
+    for loss_type, loss_dic in res_dic.items():
+        for data_range, data_dic in loss_dic.items():
             for stop_strategy in ["final", "best"]:
-                strs = []
-                if len(num_dic[stop_strategy]) == 0:
+                model_repeats = [m[stop_strategy] for m in data_dic]
+                if len(model_repeats) == 0:
+                    print(f"!> {loss_type} {data_range} is empty!")
                     continue
-                print(num_dic[stop_strategy])
-                std_dic = dic_mean_std(num_dic[stop_strategy])
-                table_strs = str_table_single_std(std_dic, table_header="layer")
-                s = f"{loss_type} on {market}-{data_type} during {data_range}"
-                s = (
-                    "\\multicolumn{"
-                    + str(len(table_strs[0]) - 1)
-                    + "}"
-                    + "{c}"
-                    + "{"
-                    + s
-                    + "}"
+                save_prefix = f"{args.expr}/{loss_type}_{data_range}_{stop_strategy}"
+                plot_daily(model_repeats, save_prefix)
+                set_dic(
+                    num_dic,
+                    stop_strategy,
+                    loss_type,
+                    data_range,
+                    [m["ERC"] for m in model_repeats],
                 )
-                if len(strs) != 0:
-                    table_strs[0] = ["", s]
-                else:
-                    table_strs = table_strs[:1] + [["", s]] + table_strs[1:]
-                strs.extend(table_strs)
 
-                if len(strs) > 0:
-                    with open(f"{expr_dir}/{loss_type}_{stop_strategy}.tex", "w") as f:
-                        f.write(str_latex_table(strs))
+    for stop_strategy in ["final", "best"]:
+        strs = []
+        if len(num_dic[stop_strategy]) == 0:
+            continue
+        std_dic = dic_mean_std(num_dic[stop_strategy])
+        table_strs = str_table_single_std(std_dic, table_header="layer")
+        s = f"{loss_type} during {data_range}"
+        s = "\\multicolumn{" + str(len(table_strs[0]) - 1) + "}" + "{c}" + "{" + s + "}"
+        if len(strs) != 0:
+            table_strs[0] = ["", s]
+        else:
+            table_strs = table_strs[:1] + [["", s]] + table_strs[1:]
+        strs.extend(table_strs)
+
+        if len(strs) > 0:
+            with open(f"{args.expr}/{loss_type}_{stop_strategy}.tex", "w") as f:
+                f.write(str_latex_table(strs))
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--benchmark", default="SH000300", type=str)
-    parser.add_argument("--expr", default="expr", type=str)
+    parser.add_argument("--expr", default="expr/main_raw_pc-1/rgr-all_l2", type=str)
     args = parser.parse_args()
     main()

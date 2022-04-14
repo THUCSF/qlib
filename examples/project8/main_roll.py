@@ -107,7 +107,7 @@ if __name__ == "__main__":
         help="The index of repeats (to distinguish different runs).",
     )
     # architecture options
-    parser.add_argument("--hidden-size", default=128, type=int)
+    parser.add_argument("--hidden-size", default=256, type=int)
     parser.add_argument(
         "--n-layer", default=2, type=int, help="The number of hidden layers."
     )
@@ -203,7 +203,7 @@ if __name__ == "__main__":
         dirpath=f"{model_dir}/{model_name}",
         filename=model_prefix + "_n={epoch}_f={val_metric:.2f}",
         monitor="val_metric",
-        mode="max",
+        mode="min",
     )
     trainer = pl.Trainer(
         max_epochs=args.n1_epoch,
@@ -233,7 +233,7 @@ if __name__ == "__main__":
             dirpath=f"{model_dir}/{model_name}",
             filename=model_prefix + "_n={epoch}_f={val_metric:.2f}",
             monitor="val_metric",
-            mode="max",
+            mode="min",
         )
         train_dl = DataLoader(train_ds, batch_size=1, shuffle=True)
         val_dl = DataLoader(val_ds, batch_size=1, shuffle=False)
