@@ -90,8 +90,9 @@ def train_rnn():
 def train_rnn_roll():
     cmds = []
     cmd = "python main_roll.py --market {market} --repeat-ind {repeat_ind} --loss-type {loss_type} --n-layer {n_layer} --train-end {train_end} --test-start {test_start} --test-end {test_end} --top-k 50 --n-drop 10 --n1-epoch 50 --n2-epoch 10 --strict-validation 0"
-    for repeat_ind in range(5):  # 35 models to be trained
-        for train_end in range(2013, 2020):  # 7
+
+    for train_end in range(2014, 2020):  # 6
+        for repeat_ind in range(5):  # 35 models to be trained
             test_end = test_start = train_end + 1
             for data_type in ["raw"]:
                 for market in ["main"]:
@@ -114,14 +115,14 @@ def train_rnn_roll():
 
 def eval_rnn():
     cmds = []
-    cmd = "python evaluate.py --market {market} --repeat-ind {repeat_ind} --loss-type {loss_type} --n-layer {n_layer} --train-end {train_end} --test-start {test_start} --test-end {test_end}"
-    for repeat_ind in range(1):  # 1500 models to be trained
+    cmd = "python evaluate.py --market {market} --repeat-ind {repeat_ind} --loss-type {loss_type} --n-layer {n_layer} --train-end {train_end} --test-start {test_start} --test-end {test_end} --model-dir expr/main_raw_pc-1_50-10/rgr-all_l2"
+    for repeat_ind in range(5):  # 1500 models to be trained
         for train_end in range(2013, 2021):  # 4
             test_end = test_start = train_end + 1
             for data_type in ["raw"]:
                 for market in ["main"]:
-                    for loss_type in ["rgr"]:
-                        for n_layer in [1]:
+                    for loss_type in ["rgr-all"]:
+                        for n_layer in [2]:
                             cmds.append(
                                 cmd.format(
                                     repeat_ind=repeat_ind,

@@ -107,7 +107,7 @@ if __name__ == "__main__":
         help="The index of repeats (to distinguish different runs).",
     )
     # architecture options
-    parser.add_argument("--hidden-size", default=128, type=int)
+    parser.add_argument("--hidden-size", default=256, type=int)
     parser.add_argument(
         "--n-layer", default=2, type=int, help="The number of hidden layers."
     )
@@ -131,8 +131,9 @@ if __name__ == "__main__":
         choices=["pc-1"],
     )
     # evaluation
+    parser.add_argument("--model-dir", default="expr/main_raw_pc-1", type=str)
     parser.add_argument("--top-k", default=50, type=int)
-    parser.add_argument("--n-drop", default=5, type=int)
+    parser.add_argument("--n-drop", default=10, type=int)
     parser.add_argument("--eval-only", default="0", type=str)
     parser.add_argument("--benchmark", default="SH000300", type=str)
     parser.add_argument("--test-start", default=2014, type=int)
@@ -141,9 +142,7 @@ if __name__ == "__main__":
     lib.set_cuda_devices(args.gpu_id)
 
     model_name = f"r{args.repeat_ind}_y{args.train_start}-y{args.test_end}"
-    model_dir = f"expr/{args.market}_{args.data_type}_{args.label_type}/{args.loss_type}_l{args.n_layer}"
-    if not os.path.exists(model_dir):
-        os.makedirs(model_dir)
+    model_dir = args.model_dir
 
     provider_uri = "../../data/china_stock_qlib_adj"
     qlib.init(provider_uri=provider_uri, region=REG_CN)
@@ -185,24 +184,26 @@ if __name__ == "__main__":
     model.load_state_dict(torch.load(f"{model_path}_final.pth"))
     final_scores, final_preds, insts, dates, indice = learner.predict_dataset(full_ds)
     dates = pd.Series(dates)
-    final_signals = pd.Series(final_scores, [insts, dates])
+    train_mask = dates < f"{args.test_start}-1-1"
+    test_mask = ~train_mask
+    final_signals = pd.Series(final_scores[test_mask], [insts[test_mask], dates[test_mask]])
     final_signals.index.set_names(["instrument", "datetime"], inplace=True)
     final_report, final_res, _, _, final_month_res = lib.backtest_signal(
         final_signals, args
     )
+    final_signals.to_pickle(f"{model_dir}/{model_name}/final_test_signal.pkl")
 
     # best model
     best_model_path = glob.glob(f"{model_path}_n=*.ckpt")[0]
     learner.load_state_dict(torch.load(best_model_path)["state_dict"])
     best_scores, best_preds, insts, dates, indice = learner.predict_dataset(full_ds)
     dates = pd.Series(dates)
-    train_mask = dates < f"{args.test_start}-1-1"
-    test_mask = ~train_mask
-    best_signals = pd.Series(best_scores, [insts, dates])
+    best_signals = pd.Series(best_scores[test_mask], [insts[test_mask], dates[test_mask]])
     best_signals.index.set_names(["instrument", "datetime"], inplace=True)
     best_report, best_res, _, _, best_month_res = lib.backtest_signal(
         best_signals, args
     )
+    best_signals.to_pickle(f"{model_dir}/{model_name}/best_test_signal.pkl")
 
     # split signal between train and test
     label_gt = full_df[target_names].values[indice].squeeze()
