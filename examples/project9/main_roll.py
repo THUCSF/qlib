@@ -2,14 +2,20 @@
 """
 # pylint: disable=wrong-import-position,multiple-imports,import-error,invalid-name,line-too-long
 import json, copy, argparse, os, torch, sys, glob
+import pytorch_lightning.loggers as pl_logger
+import pytorch_lightning as pl
 import matplotlib.pyplot as plt
 import matplotlib
 import pandas as pd
 import numpy as np
+from tqdm import tqdm
+from torch.utils.data import DataLoader
+from pytorch_lightning.callbacks import ModelCheckpoint
 
 sys.path.insert(0, "../..")
 import qlib, lib
-from dataset import TSDataset
+from lib import torch2numpy
+from dataset import AlignedTSDataset, TSDataset
 from qlib.utils import init_instance_by_config
 from qlib.config import REG_CN
 
@@ -71,7 +77,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--strict-validation",
-        default=1,
+        default=0,
         type=int,
         help="Whether to ensure strict validation set.",
     )
@@ -90,7 +96,7 @@ if __name__ == "__main__":
     parser.add_argument("--horizon", default=1, type=int, help="Predicted length.")
     parser.add_argument("--gpu-id", default="0", type=str)
     parser.add_argument(
-        "--market", default="main", type=str, choices=["csi300", "main"]
+        "--market", default="csi300", type=str, choices=["csi300", "main"]
     )
     parser.add_argument("--train-start", default=2011, type=int)
     parser.add_argument("--train-end", default=2013, type=int)
@@ -107,7 +113,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--loss-type",
-        default="rgr-all",
+        default="rgr-last",
         type=str,
         help="The type of loss function and output format. rgr - regression; cls - classification; br - bayesian regression; mae - mean absolute error",
     )
@@ -125,21 +131,22 @@ if __name__ == "__main__":
         choices=["pc-1"],
     )
     # evaluation
-    parser.add_argument("--model-dir", default="expr/main_raw_pc-1", type=str)
     parser.add_argument("--top-k", default=50, type=int)
-    parser.add_argument("--n-drop", default=10, type=int)
+    parser.add_argument("--n-drop", default=5, type=int)
     parser.add_argument("--eval-only", default="0", type=str)
     parser.add_argument("--benchmark", default="SH000300", type=str)
     parser.add_argument("--test-start", default=2014, type=int)
     parser.add_argument("--test-end", default=2014, type=int)
     args = parser.parse_args()
     lib.set_cuda_devices(args.gpu_id)
-    model_name = f"r{args.repeat_ind}_y{args.train_start}-y{args.test_end}"
-    model_dir = args.model_dir
 
-    # if os.path.exists(f"{model_dir}/{model_name}/result.json"):
-    #    print(f"=> Skip {model_dir}/{model_name}/result.json.")
-    #    exit(0)
+    model_name = f"r{args.repeat_ind}_y{args.train_start}-y{args.test_end}"
+    model_dir = f"expr/{args.market}_{args.data_type}_{args.label_type}/{args.loss_type}_l{args.n_layer}"
+    if not os.path.exists(model_dir):
+        os.makedirs(model_dir)
+    if os.path.exists(f"{model_dir}/{model_name}/result.json"):
+        print(f"=> Skip {model_dir}/{model_name}/result.json.")
+        exit(0)
 
     provider_uri = "../../data/china_stock_qlib_adj"
     qlib.init(provider_uri=provider_uri, region=REG_CN)
@@ -163,6 +170,84 @@ if __name__ == "__main__":
     tvcv_names = list(full_df["feature"].columns)
     target_names = list(full_df["label"].columns)
     full_df = df_to_tsdf(full_df)
+    valid_mask = full_df[target_names[0]].abs() < 11
+    full_df = full_df[valid_mask]
+    full_df.reset_index(inplace=True)
+    full_df.drop(columns="index", inplace=True)
+    full_ds = AlignedTSDataset(
+        full_df,  # AlignedTSDataset
+        seq_len=args.seq_len,
+        horizon=args.horizon,
+        target_names=target_names,
+        input_names=tvcv_names,
+    )
+
+    val_end_date = f"{args.train_end+1}-1-1"
+    train_end_date = (
+        f"{args.train_end}-12-1" if args.strict_validation else val_end_date
+    )
+    train_ds = full_ds.get_split(f"{args.train_start}-1-1", train_end_date)
+    val_ds = full_ds.get_split(f"{args.train_end}-12-1", val_end_date)
+    print("=> Training dataset:")
+    train_ds.describe()
+    print("=> Validation dataset:")
+    val_ds.describe()
+    train_dl = DataLoader(train_ds, batch_size=1, shuffle=True)
+    val_dl = DataLoader(val_ds, batch_size=1, shuffle=False)
+
+    print(f"=> Initial training on {args.train_start}-{args.train_end}")
+    logger = pl_logger.TensorBoardLogger(f"{model_dir}/{model_name}")
+    model_prefix = f"model_y{args.test_start}_m01"
+    mc = ModelCheckpoint(
+        save_weights_only=True,
+        dirpath=f"{model_dir}/{model_name}",
+        filename=model_prefix + "_n={epoch}_f={val_metric:.2f}",
+        monitor="val_metric",
+        mode="min",
+    )
+    trainer = pl.Trainer(
+        max_epochs=args.n1_epoch,
+        gpus=1,
+        log_every_n_steps=10,
+        callbacks=[mc],
+        logger=logger,
+    )
+    trainer.fit(learner, train_dl, val_dl)
+    torch.save(model.state_dict(), f"{model_dir}/{model_name}/{model_prefix}_final.pth")
+
+    for i in range(1, 13):  # for now, roll only in one year
+        test_start_date = f"{args.test_start}-{i}-1"
+        test_end_date = (
+            f"{args.test_start}-{i+1}-1" if i < 12 else f"{args.test_start+1}-1-1"
+        )
+        train_end_date = test_start_date if args.strict_validation else test_end_date
+        train_ds = full_ds.get_split(f"{args.train_start}-1-1", train_end_date)
+        val_ds = full_ds.get_split(test_start_date, test_end_date)
+        print("=> Training dataset:")
+        train_ds.describe()
+        print("=> Validation dataset:")
+        val_ds.describe()
+        model_prefix = f"model_y{args.test_start}_m{i+1:02d}"
+        mc = ModelCheckpoint(
+            save_weights_only=True,
+            dirpath=f"{model_dir}/{model_name}",
+            filename=model_prefix + "_n={epoch}_f={val_metric:.2f}",
+            monitor="val_metric",
+            mode="min",
+        )
+        train_dl = DataLoader(train_ds, batch_size=1, shuffle=True)
+        val_dl = DataLoader(val_ds, batch_size=1, shuffle=False)
+        trainer = pl.Trainer(
+            max_epochs=args.n2_epoch,
+            gpus=1,
+            log_every_n_steps=1,
+            callbacks=[mc],
+            logger=logger,
+        )
+        trainer.fit(learner, train_dl, val_dl)
+        torch.save(
+            model.state_dict(), f"{model_dir}/{model_name}/{model_prefix}_final.pth"
+        )
 
     learner.cuda()
     st = f"{args.test_start-1}-6-1"
@@ -212,15 +297,12 @@ if __name__ == "__main__":
     best_signals = pd.concat(best_signals)
     final_signals.index.set_names(["instrument", "datetime"], inplace=True)
     best_signals.index.set_names(["instrument", "datetime"], inplace=True)
-    final_signals.to_pickle(f"{model_dir}/{model_name}/final_test_signal.pkl")
-    best_signals.to_pickle(f"{model_dir}/{model_name}/best_test_signal.pkl")
     final_report, final_res, _, _, final_month_res = lib.backtest_signal(
         final_signals, args
     )
     best_report, best_res, _, _, best_month_res = lib.backtest_signal(
         best_signals, args
     )
-
     test_indice = np.concatenate(test_indice)
     test_gt = test_ds.df[test_ds.target_names].values[test_indice].squeeze()
 

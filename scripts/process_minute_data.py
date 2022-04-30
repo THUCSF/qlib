@@ -24,7 +24,7 @@ class GeneralThread(Thread):
 TEMP_DIR = "data/temp_csv"  # storing temp csv
 QLIB_DATA_DIR = "data/minute_qlib"
 INTERVAL = 100
-STEP = 2
+STEP = 1
 
 if STEP == 1:
     zfile = ZipFile("data/gettinydata.zip")
@@ -35,7 +35,7 @@ if STEP == 1:
     for idx, finfo in enumerate(tqdm(fileinfos)):
         zfile.extract(finfo, TEMP_DIR)
         if (idx + 1) % INTERVAL == 0 or idx == len(fileinfos) - 1:
-            func_name = DumpDataAll if idx + 1 == INTERVAL else DumpDataUpdate
+            func_name = DumpDataAll if not os.path.exists(QLIB_DATA_DIR) else DumpDataUpdate
             csv_path = os.path.join(TEMP_DIR, "gettinydata")
             func = func_name(
                 csv_path=csv_path,
@@ -56,9 +56,8 @@ if STEP == 2:
     for idx, finfo in enumerate(tqdm(fileinfos)):
         zfile.extract(finfo, TEMP_DIR)
         if (idx + 1) % INTERVAL == 0 or idx == len(fileinfos) - 1:
-            func_name = DumpDataAll if idx + 1 == INTERVAL else DumpDataUpdate
             csv_path = os.path.join(TEMP_DIR, "data_min")
-            func = func_name(
+            func = DumpDataUpdate(
                 csv_path=csv_path,
                 qlib_dir=QLIB_DATA_DIR,
                 freq="minute",

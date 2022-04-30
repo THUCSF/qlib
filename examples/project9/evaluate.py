@@ -2,14 +2,20 @@
 """
 # pylint: disable=wrong-import-position,multiple-imports,import-error,invalid-name,line-too-long
 import json, copy, argparse, os, torch, sys, glob
+import pytorch_lightning.loggers as pl_logger
+import pytorch_lightning as pl
 import matplotlib.pyplot as plt
 import matplotlib
 import pandas as pd
 import numpy as np
+from tqdm import tqdm
+from torch.utils.data import DataLoader
+from pytorch_lightning.callbacks import ModelCheckpoint
 
 sys.path.insert(0, "../..")
 import qlib, lib
-from dataset import TSDataset
+from lib import torch2numpy
+from dataset import AlignedTSDataset, TSDataset
 from qlib.utils import init_instance_by_config
 from qlib.config import REG_CN
 
@@ -71,7 +77,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--strict-validation",
-        default=1,
+        default=0,
         type=int,
         help="Whether to ensure strict validation set.",
     )
@@ -134,12 +140,9 @@ if __name__ == "__main__":
     parser.add_argument("--test-end", default=2014, type=int)
     args = parser.parse_args()
     lib.set_cuda_devices(args.gpu_id)
+
     model_name = f"r{args.repeat_ind}_y{args.train_start}-y{args.test_end}"
     model_dir = args.model_dir
-
-    # if os.path.exists(f"{model_dir}/{model_name}/result.json"):
-    #    print(f"=> Skip {model_dir}/{model_name}/result.json.")
-    #    exit(0)
 
     provider_uri = "../../data/china_stock_qlib_adj"
     qlib.init(provider_uri=provider_uri, region=REG_CN)
@@ -163,85 +166,54 @@ if __name__ == "__main__":
     tvcv_names = list(full_df["feature"].columns)
     target_names = list(full_df["label"].columns)
     full_df = df_to_tsdf(full_df)
-
-    learner.cuda()
-    st = f"{args.test_start-1}-6-1"
-    ed = f"{args.test_start}-12-31"
-    full_df = [
-        g[(g.datetime >= st) & (g.datetime <= ed)]
-        for _, g in full_df.groupby("instrument")
-    ]
-    full_df = pd.concat(full_df)
+    valid_mask = full_df[target_names[0]].abs() < 11
+    full_df = full_df[valid_mask]
     full_df.reset_index(inplace=True)
     full_df.drop(columns="index", inplace=True)
-    test_ds = TSDataset(
+
+    full_ds = TSDataset(
         full_df,
         seq_len=args.seq_len,
         horizon=args.horizon,
         target_names=target_names,
         input_names=tvcv_names,
     )
-    final_signals, best_signals, test_indice = [], [], []
-    for i in range(1, 13):
-        model_path = f"{model_dir}/{model_name}/model_y{args.test_start}_m{i:02d}"
-        # final model
-        model.load_state_dict(torch.load(f"{model_path}_final.pth"))
-        test_scores, test_preds, test_insts, test_dates, idx = learner.predict_dataset(
-            test_ds
-        )
-        test_dates = pd.Series(test_dates)
-        st = f"{args.test_start}-{i}-1"
-        ed = f"{args.test_start}-{i+1}-1" if i < 12 else f"{args.test_start+1}-1-1"
-        mask = (st <= test_dates) & (test_dates < ed) if i > 1 else (test_dates < ed)
-        test_indice.append(idx[mask])
-        test_scores, test_preds = test_scores[mask], test_preds[mask]
-        final_signals.append(
-            pd.Series(test_scores, [test_insts[mask], test_dates[mask]])
-        )
-
-        # best model
-        best_model_path = glob.glob(f"{model_path}_n=*.ckpt")[0]
-        learner.load_state_dict(torch.load(best_model_path)["state_dict"])
-        test_scores, test_preds, _, _, _ = learner.predict_dataset(test_ds)
-        test_scores, test_preds = test_scores[mask], test_preds[mask]
-        best_signals.append(
-            pd.Series(test_scores, [test_insts[mask], test_dates[mask]])
-        )
-
-    final_signals = pd.concat(final_signals)
-    best_signals = pd.concat(best_signals)
+    model_path = f"{model_dir}/{model_name}/model_y{args.test_start}_m01"
+    learner.cuda().eval()
+    # final model
+    model.load_state_dict(torch.load(f"{model_path}_final.pth"))
+    final_scores, final_preds, insts, dates, indice = learner.predict_dataset(full_ds)
+    dates = pd.Series(dates)
+    train_mask = dates < f"{args.test_start}-1-1"
+    test_mask = ~train_mask
+    final_signals = pd.Series(final_scores[test_mask], [insts[test_mask], dates[test_mask]])
     final_signals.index.set_names(["instrument", "datetime"], inplace=True)
-    best_signals.index.set_names(["instrument", "datetime"], inplace=True)
-    final_signals.to_pickle(f"{model_dir}/{model_name}/final_test_signal.pkl")
-    best_signals.to_pickle(f"{model_dir}/{model_name}/best_test_signal.pkl")
     final_report, final_res, _, _, final_month_res = lib.backtest_signal(
         final_signals, args
     )
+    final_signals.to_pickle(f"{model_dir}/{model_name}/final_test_signal.pkl")
+
+    # best model
+    best_model_path = glob.glob(f"{model_path}_n=*.ckpt")[0]
+    learner.load_state_dict(torch.load(best_model_path)["state_dict"])
+    best_scores, best_preds, insts, dates, indice = learner.predict_dataset(full_ds)
+    dates = pd.Series(dates)
+    best_signals = pd.Series(best_scores[test_mask], [insts[test_mask], dates[test_mask]])
+    best_signals.index.set_names(["instrument", "datetime"], inplace=True)
     best_report, best_res, _, _, best_month_res = lib.backtest_signal(
         best_signals, args
     )
+    best_signals.to_pickle(f"{model_dir}/{model_name}/best_test_signal.pkl")
 
-    test_indice = np.concatenate(test_indice)
-    test_gt = test_ds.df[test_ds.target_names].values[test_indice].squeeze()
+    # split signal between train and test
+    label_gt = full_df[target_names].values[indice].squeeze()
+    train_gt, test_gt = label_gt[train_mask], label_gt[test_mask]
+    train_scores = best_scores[train_mask]
+    test_scores = best_scores[test_mask]
 
-    train_df = [
-        g[g.datetime <= f"{args.train_end}-12-31"]
-        for _, g in full_df.groupby("instrument")
-    ]
-    train_df = pd.concat(train_df)
-    train_df.reset_index(inplace=True)
-    train_df.drop(columns="index", inplace=True)
-    train_ds = TSDataset(
-        train_df,
-        seq_len=args.seq_len,
-        horizon=1,
-        target_names=target_names,
-        input_names=tvcv_names,
-    )
-    train_scores, train_preds, _, _, train_indice = learner.predict_dataset(train_ds)
-    train_gt = train_ds.df[train_ds.target_names].values
-    train_gt = train_gt[train_indice].squeeze()
     if "br" in args.loss_type:
+        train_preds = best_preds[train_mask]
+        test_preds = best_preds[test_mask]
         plot_br(
             [train_scores, test_scores],
             [train_preds, test_preds],
@@ -264,3 +236,4 @@ if __name__ == "__main__":
         best_month_res,
         best_report,
     )
+
