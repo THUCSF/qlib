@@ -134,12 +134,9 @@ if __name__ == "__main__":
     parser.add_argument("--test-end", default=2014, type=int)
     args = parser.parse_args()
     lib.set_cuda_devices(args.gpu_id)
-    model_name = f"r{args.repeat_ind}_y{args.train_start}-y{args.test_end}"
-    model_dir = args.model_dir
-
-    # if os.path.exists(f"{model_dir}/{model_name}/result.json"):
-    #    print(f"=> Skip {model_dir}/{model_name}/result.json.")
-    #    exit(0)
+    model_dir = glob.glob(f"{args.model_dir}/r{args.repeat_ind}_*-y{args.test_end}")[0]
+    print(model_dir)
+    model_name = model_dir[model_dir.rfind("/")+1:] 
 
     provider_uri = "../../data/china_stock_qlib_adj"
     qlib.init(provider_uri=provider_uri, region=REG_CN)
@@ -183,7 +180,7 @@ if __name__ == "__main__":
     )
     final_signals, best_signals, test_indice = [], [], []
     for i in range(1, 13):
-        model_path = f"{model_dir}/{model_name}/model_y{args.test_start}_m{i:02d}"
+        model_path = f"{model_dir}/model_y{args.test_start}_m{i:02d}"
         # final model
         model.load_state_dict(torch.load(f"{model_path}_final.pth"))
         test_scores, test_preds, test_insts, test_dates, idx = learner.predict_dataset(
@@ -212,8 +209,8 @@ if __name__ == "__main__":
     best_signals = pd.concat(best_signals)
     final_signals.index.set_names(["instrument", "datetime"], inplace=True)
     best_signals.index.set_names(["instrument", "datetime"], inplace=True)
-    final_signals.to_pickle(f"{model_dir}/{model_name}/final_test_signal.pkl")
-    best_signals.to_pickle(f"{model_dir}/{model_name}/best_test_signal.pkl")
+    final_signals.to_pickle(f"{model_dir}/final_test_signal.pkl")
+    best_signals.to_pickle(f"{model_dir}/best_test_signal.pkl")
     final_report, final_res, _, _, final_month_res = lib.backtest_signal(
         final_signals, args
     )

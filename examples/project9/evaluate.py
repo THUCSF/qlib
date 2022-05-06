@@ -1,21 +1,16 @@
 """Test LSTM layers
 """
 # pylint: disable=wrong-import-position,multiple-imports,import-error,invalid-name,line-too-long
-import json, copy, argparse, os, torch, sys, glob
-import pytorch_lightning.loggers as pl_logger
-import pytorch_lightning as pl
+import copy, argparse, torch, sys, glob
 import matplotlib.pyplot as plt
 import matplotlib
 import pandas as pd
 import numpy as np
-from tqdm import tqdm
-from torch.utils.data import DataLoader
-from pytorch_lightning.callbacks import ModelCheckpoint
 
 sys.path.insert(0, "../..")
 import qlib, lib
 from lib import torch2numpy
-from dataset import AlignedTSDataset, TSDataset
+from dataset import TSDataset
 from qlib.utils import init_instance_by_config
 from qlib.config import REG_CN
 
@@ -141,8 +136,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
     lib.set_cuda_devices(args.gpu_id)
 
-    model_name = f"r{args.repeat_ind}_y{args.train_start}-y{args.test_end}"
-    model_dir = args.model_dir
+    model_dir = glob.glob(f"{args.model_dir}/r{args.repeat_ind}_*-y{args.test_end}")[0]
+    model_name = model_dir[model_dir.rfind("/")+1:] 
 
     provider_uri = "../../data/china_stock_qlib_adj"
     qlib.init(provider_uri=provider_uri, region=REG_CN)
@@ -178,7 +173,7 @@ if __name__ == "__main__":
         target_names=target_names,
         input_names=tvcv_names,
     )
-    model_path = f"{model_dir}/{model_name}/model_y{args.test_start}_m01"
+    model_path = f"{model_dir}/model_y{args.test_start}_m01"
     learner.cuda().eval()
     # final model
     model.load_state_dict(torch.load(f"{model_path}_final.pth"))
@@ -188,10 +183,10 @@ if __name__ == "__main__":
     test_mask = ~train_mask
     final_signals = pd.Series(final_scores[test_mask], [insts[test_mask], dates[test_mask]])
     final_signals.index.set_names(["instrument", "datetime"], inplace=True)
-    final_report, final_res, _, _, final_month_res = lib.backtest_signal(
+    final_report, final_res, final_portfolio_metrics, final_indicators, final_month_res = lib.backtest_signal(
         final_signals, args
     )
-    final_signals.to_pickle(f"{model_dir}/{model_name}/final_test_signal.pkl")
+    final_signals.to_pickle(f"{model_path}_final_test_signal.pkl")
 
     # best model
     best_model_path = glob.glob(f"{model_path}_n=*.ckpt")[0]
@@ -203,7 +198,7 @@ if __name__ == "__main__":
     best_report, best_res, _, _, best_month_res = lib.backtest_signal(
         best_signals, args
     )
-    best_signals.to_pickle(f"{model_dir}/{model_name}/best_test_signal.pkl")
+    best_signals.to_pickle(f"{model_path}_best_test_signal.pkl")
 
     # split signal between train and test
     label_gt = full_df[target_names].values[indice].squeeze()
@@ -218,16 +213,16 @@ if __name__ == "__main__":
             [train_scores, test_scores],
             [train_preds, test_preds],
             [train_gt, test_gt],
-            model_dir,
+            args.model_dir,
             model_name,
         )
     else:
         plot_normal(
-            [train_scores, test_scores], [train_gt, test_gt], model_dir, model_name
+            [train_scores, test_scores], [train_gt, test_gt], args.model_dir, model_name
         )
 
     lib.save_results(
-        f"{model_dir}/{model_name}",
+        model_path,
         task,
         final_res,
         final_month_res,

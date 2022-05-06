@@ -1,3 +1,4 @@
+from re import A
 import torch
 import math
 import pandas as pd
@@ -19,6 +20,59 @@ def collate_step_outputs(outs):
         pred.append(outs[i]["pred"])
         y.append(outs[i]["y"])
     return torch.cat(pred).squeeze(), torch.cat(y).squeeze()
+
+
+class QuantileLoss(torch.autograd.Function):
+    """Calculate the quantile loss between two sequences.
+    Differentiable loss of sorting in quantile.
+    Args:
+        coef: A scaling parameter.
+        n_q: The number of quantiles.
+        t_q: The threshold of quantile difference to be minimized.
+    """
+
+    def __init__(self, coef=1.0, n_q=10, t_q=1):
+        super().__init__()
+        self.coef = coef
+        self.n_q, self.t_q = n_q, t_q
+
+    @staticmethod
+    def forward(ctx, dt_seq : torch.Tensor, gt_seq : torch.Tensor, coef : float = 1.0, n_q : int = 10, t_q : int = 1):
+        """
+        Args:
+            dt_seq: Shape (N,) Tensor, the sequence to be differentiated.
+            gt_seq: Shape (N,) Tensor, the groundtruth values.
+        """
+        dt_idx = dt_seq.argsort() # in ascenting order
+        gt_idx = gt_seq.argsort()
+        dt_q = torch.zeros_like(dt_idx)
+        gt_q = torch.zeros_like(gt_idx)
+        step_size = math.floor(dt_idx.shape[0] / float(n_q))
+        for q_idx in range(n_q):
+            st, ed = step_size * q_idx, step_size * (q_idx + 1)
+            ed = min(dt_idx.shape[0], ed)
+            dt_q[dt_idx[st:ed]] = q_idx
+            gt_q[gt_idx[st:ed]] = q_idx
+        diff_q = (gt_q - dt_q).float()
+        ctx.save_for_backward(diff_q)
+        ctx.coef, ctx.t_q = coef, t_q 
+        return diff_q.abs().mean()
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        """
+        Args:
+            grad_output: The gradient from above.
+        """
+        coef, t_q = ctx.coef, ctx.t_q
+        diff_q, = ctx.saved_tensors
+        mask = diff_q.abs() > t_q
+        grad = (mask * diff_q).float()
+        return coef * grad * grad_output, -coef * grad * grad_output, None, None, None
+
+
+def quantile_loss(dt_seq, gt_seq, coef=1.0, n_q=10, t_q=1):
+    return QuantileLoss.apply(dt_seq, gt_seq, coef, n_q, t_q)
 
 
 class RNNLearner(pl.LightningModule):
@@ -53,8 +107,10 @@ class RNNLearner(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         input, target = batch["input"].cuda(), batch["target"].cuda()
         if input.shape[0] == 1 and len(input.shape) == 4:
+            # squeeze if there is an extra batch dimension
             input = input[0]
             target = target[0]
+        # 64, 123, 1
         if "last" in self.loss_type:
             pred = self.model(input)
             loss = self.loss_fn(pred, target[-1])
@@ -69,7 +125,7 @@ class RNNLearner(pl.LightningModule):
         return {"loss": loss, "y": target.detach().cpu(), "pred": pred.detach().cpu()}
 
     def pred2score(self, pred):
-        if "rgr" in self.loss_type or "mae" in self.loss_type:
+        if "rgr" in self.loss_type or "quantile" in self.loss_type:
             return pred.squeeze()
         elif "cls" in self.loss_type:
             prob = F.softmax(pred, 1)
@@ -82,9 +138,12 @@ class RNNLearner(pl.LightningModule):
     def loss_fn(self, pred, label):
         loss = 0
         if "rgr" in self.loss_type:
-            loss = loss + torch.square(pred - label).mean()
-        elif "mae" in self.loss_type:
-            loss = loss + (pred - label).abs().mean()
+            #loss = loss + torch.square(pred - label).mean()
+            nomin = (pred - label).abs()
+            denom = pred.abs().detach() + label.abs()
+            loss = loss + (nomin / denom).mean() * 100
+        elif "quantile" in self.loss_type:
+            loss = loss + quantile_loss(pred, label)
         elif "br" in self.loss_type:  # beyesian regression
             pred_y, pred_logvar = pred[:, :, :1], pred[:, :, 1:]
             pred_var = torch.exp(pred_logvar)
@@ -137,19 +196,6 @@ class RNNLearner(pl.LightningModule):
         preds = torch.cat(preds).cpu().numpy()
         return scores, preds, insts, dates, target_indice
 
-    def _calc_high_rank_return(self, pred, y):
-        score = self.pred2score(pred)
-        pmin, pmax = score.min(), score.max()
-        psmin = pmax - (pmax - pmin) * 0.1
-        if "cls" in self.loss_type:
-            ret = y[:, 0]
-            mask = torch.isfinite(ret) & (score > psmin)
-            hrr = ret[mask].mean()
-        else:
-            mask = torch.isfinite(y) & (score > psmin)
-            hrr = y[mask].mean()
-        return hrr
-
     def _calc_acc(self, pred, y):
         tp = (pred.argmax(1) == y).sum()
         acc = tp / y.shape[0]
@@ -160,6 +206,8 @@ class RNNLearner(pl.LightningModule):
         for out in outs:
             pred = out["pred"].squeeze().cpu().numpy()
             y = out["y"].squeeze().cpu().numpy()
+            if len(y.shape) == 0:
+                return math.nan
             pred_indice = pred.argsort()
             gt_indice = y.argsort()
             Q = min(50, int(pred.shape[0] * 0.1))

@@ -31,6 +31,10 @@ def organize_results(final_res, final_month_res, final_report, best_res=None, be
                 k.strftime("%Y-%m-%d"): v
                 for k, v in final_report["return"].to_dict().items()
             },
+            "daily_position": {
+                k.strftime("%Y-%m-%d"): v.position
+                for k, v in final_res["position"].items()
+            }
         },
     }
     if best_res:
@@ -43,6 +47,10 @@ def organize_results(final_res, final_month_res, final_report, best_res=None, be
                 k.strftime("%Y-%m-%d"): v
                 for k, v in best_report["return"].to_dict().items()
             },
+            "daily_position": {
+                k.strftime("%Y-%m-%d"): v.position
+                for k, v in best_res["position"].items()
+            }
         }
     return eval_result
 
@@ -55,9 +63,9 @@ def save_results(save_path, task, final_res, final_month_res, final_report, best
         "learner_config": task["learner"],
         "model_config": task["model"],
         "dataset_config": task["dataset"]}
-    with open(f"{save_path}/config.json", "w", encoding="ascii") as f:
+    with open(f"{save_path}_config.json", "w", encoding="ascii") as f:
         json.dump(config, f, indent=2)
-    with open(f"{save_path}/result.json", "w", encoding="ascii") as f:
+    with open(f"{save_path}_result.json", "w", encoding="ascii") as f:
         json.dump(eval_result, f, indent=2)
 
 
@@ -185,6 +193,7 @@ def backtest_signal(signal, args):
         **port_analysis_config["backtest"])
     res = {}
     for _freq, (report_normal, positions_normal) in portfolio_metric_dict.items():
+        res["position"] = positions_normal
         res["ER"] = my_risk_analysis(
             report_normal["return"] - report_normal["bench"], freq=_freq)
         res["ERC"] = my_risk_analysis(
@@ -292,7 +301,7 @@ def get_train_config(args):
         output_dim = 2 # regress with bayesian
     elif "cls" in args.loss_type:
         output_dim = 5  # 5 class for price change
-    elif "rgr" in args.loss_type or "mae" in args.loss_type:
+    elif "rgr" in args.loss_type or "quantile" in args.loss_type:
         output_dim = 1  # regress the price directly
 
     task = {
@@ -305,7 +314,7 @@ def get_train_config(args):
                 "output_size": output_dim,
                 "hidden_size": args.hidden_size,
                 "num_layers": args.n_layer,
-                "dropout": 0.5
+                "dropout": 0.1
             },
         },
         "learner": {
@@ -313,8 +322,8 @@ def get_train_config(args):
             "module_path": "qlib.contrib.model.rnn",
             "kwargs": {
                 "loss_type": args.loss_type,
-                "lr": 0.001,
-                "weight_decay": 1e-4
+                "lr": 1e-4,
+                "weight_decay": 1e-6
             },
         },
         "dataset": {

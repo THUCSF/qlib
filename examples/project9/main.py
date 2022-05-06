@@ -176,8 +176,10 @@ if __name__ == "__main__":
     trainer = pl.Trainer(
         max_epochs=args.n1_epoch,
         gpus=1,
-        log_every_n_steps=10,
+        log_every_n_steps=1,
         callbacks=[mc],
+        accumulate_grad_batches=10,
+        track_grad_norm=1,
         logger=logger)
     trainer.fit(learner, train_dl, val_dl)
     torch.save(model.state_dict(),

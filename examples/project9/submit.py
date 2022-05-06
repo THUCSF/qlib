@@ -17,61 +17,18 @@ parser.add_argument("--gpu", default="-1")
 args = parser.parse_args()
 
 
-def train_mlp():
-    cmds = []
-    cmd = "python main.py --data-type {data_type} --market {market} --repeat-ind {repeat_ind} --loss-type {loss_type} --n-layer {n_layer} --win-size {win_size}  --train-end {train_end} --valid-start {valid_start} --valid-end {valid_end} --test-start {test_start} --test-end {test_end}"
-
-    for repeat_ind in range(5):  # 1500 models to be trained
-        for train_end in range(2012, 2017):
-            valid_start = valid_end = train_end + 2
-            test_start = test_end = valid_end + 2
-            for data_type in ["raw"]:
-                for market in ["csi300", "main"]:
-                    for loss_type in ["rgr", "cls"]:
-                        for win_size in [1, 4, 8, 16, 32]:
-                            for n_layer in [1, 4, 8]:
-                                cmds.append(
-                                    cmd.format(
-                                        repeat_ind=repeat_ind,
-                                        data_type=data_type,
-                                        market=market,
-                                        loss_type=loss_type,
-                                        n_layer=n_layer,
-                                        win_size=win_size,
-                                        train_end=train_end,
-                                        valid_start=valid_start,
-                                        valid_end=valid_end,
-                                        test_start=test_start,
-                                        test_end=test_end,
-                                    )
-                                )
-
-        # alph158
-        """
-    for market in ["csi300", "main"]:
-      for loss_type in ["rgr", "br", "cls"]:
-        for n_layer in [1, 4, 8]:
-          for repeat_ind in range(5):
-            cmds.append(cmd.format(repeat_ind=repeat_ind,
-              data_type="alpha158", market=market, loss_type=loss_type,
-              n_layer=n_layer, win_size=1,
-              train_end=train_end,
-              valid_start=valid_start, valid_end=valid_end,
-              test_start=test_start, test_end=test_end))
-    """
-    return cmds
-
-
 def train_rnn():
     cmds = []
-    cmd = "python main.py --market {market} --repeat-ind {repeat_ind} --loss-type {loss_type} --n-layer {n_layer} --train-end {train_end} --test-start {test_start} --test-end {test_end} --top-k 50 --n-drop 10 --n1-epoch 50 --strict-validation 1"
+    cmd = "python main.py --market {market} --repeat-ind {repeat_ind} --loss-type {loss_type} --n-layer {n_layer} --train-end {train_end} --test-start {test_start} --test-end {test_end} --top-k 50 --n-drop 10 --n1-epoch 50 --strict-validation 0"
+
+    
     for repeat_ind in range(5):
-        for train_end in range(2013, 2020):  # 4
+        for train_end in range(2014, 2020):  # 4
             test_end = test_start = train_end + 1
             for data_type in ["raw"]:
                 for market in ["main"]:
-                    for loss_type in ["rgr-all", "rgr-last"]:
-                        for n_layer in [2]:
+                    for loss_type in ["quantile-last"]:
+                        for n_layer in [4]:
                             cmds.append(
                                 cmd.format(
                                     repeat_ind=repeat_ind,
@@ -115,10 +72,11 @@ def train_rnn_roll():
 
 def eval_rnn():
     cmds = []
-    cmd = "python evaluate.py --market {market} --repeat-ind {repeat_ind} --loss-type {loss_type} --n-layer {n_layer} --train-end {train_end} --test-start {test_start} --test-end {test_end} --model-dir expr/main_raw_pc-1_50-10/rgr-all_l2"
+    cmd = "python evaluate.py --market {market} --repeat-ind {repeat_ind} --loss-type {loss_type} --n-layer {n_layer} --train-start {train_start} --train-end {train_end} --test-start {test_start} --test-end {test_end} --model-dir expr/main_raw_pc-1_50-10/rgr-all_l2"
     for repeat_ind in range(5):  # 1500 models to be trained
         for train_end in range(2013, 2020):  # 4
             test_end = test_start = train_end + 1
+            train_start = train_end
             for data_type in ["raw"]:
                 for market in ["main"]:
                     for loss_type in ["rgr-all"]:
@@ -130,6 +88,7 @@ def eval_rnn():
                                     market=market,
                                     loss_type=loss_type,
                                     n_layer=n_layer,
+                                    train_start=train_start,
                                     train_end=train_end,
                                     test_start=test_start,
                                     test_end=test_end,
@@ -163,7 +122,6 @@ def eval_rnn_roll():
     return cmds
 
 funcs = {
-    "train_mlp": train_mlp,
     "train_rnn": train_rnn,
     "train_rnn_roll": train_rnn_roll,
     "eval_rnn": eval_rnn,

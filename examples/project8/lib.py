@@ -31,6 +31,10 @@ def organize_results(final_res, final_month_res, final_report, best_res=None, be
                 k.strftime("%Y-%m-%d"): v
                 for k, v in final_report["return"].to_dict().items()
             },
+            "daily_position": {
+                k.strftime("%Y-%m-%d"): v
+                for k, v in final_report["position"].position.items()
+            }
         },
     }
     if best_res:
@@ -43,6 +47,10 @@ def organize_results(final_res, final_month_res, final_report, best_res=None, be
                 k.strftime("%Y-%m-%d"): v
                 for k, v in best_report["return"].to_dict().items()
             },
+            "daily_position": {
+                k.strftime("%Y-%m-%d"): v
+                for k, v in best_report["position"].position.items()
+            }
         }
     return eval_result
 
@@ -55,9 +63,9 @@ def save_results(save_path, task, final_res, final_month_res, final_report, best
         "learner_config": task["learner"],
         "model_config": task["model"],
         "dataset_config": task["dataset"]}
-    with open(f"{save_path}/config.json", "w", encoding="ascii") as f:
+    with open(f"{save_path}_config.json", "w", encoding="ascii") as f:
         json.dump(config, f, indent=2)
-    with open(f"{save_path}/result.json", "w", encoding="ascii") as f:
+    with open(f"{save_path}_result.json", "w", encoding="ascii") as f:
         json.dump(eval_result, f, indent=2)
 
 
