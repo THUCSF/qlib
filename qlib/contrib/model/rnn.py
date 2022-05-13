@@ -56,7 +56,8 @@ class QuantileLoss(torch.autograd.Function):
         diff_q = (gt_q - dt_q).float()
         ctx.save_for_backward(diff_q)
         ctx.coef, ctx.t_q = coef, t_q 
-        return diff_q.abs().mean()
+        val = diff_q.abs().mean()
+        return val
 
     @staticmethod
     def backward(ctx, grad_output):
@@ -136,14 +137,15 @@ class RNNLearner(pl.LightningModule):
             return pred[-1, :, 0] - torch.exp(pred[-1, :, 1] / 2)
 
     def loss_fn(self, pred, label):
-        loss = 0
+        loss = torch.zeros(1).to(pred.device).requires_grad_(True)
         if "rgr" in self.loss_type:
             #loss = loss + torch.square(pred - label).mean()
             nomin = (pred - label).abs()
             denom = pred.abs().detach() + label.abs()
             loss = loss + (nomin / denom).mean() * 100
-        elif "quantile" in self.loss_type:
-            loss = loss + quantile_loss(pred, label)
+        elif "quantile-last" in self.loss_type:
+            if label.numel() > 1:
+                loss = loss + quantile_loss(pred.squeeze(), label.squeeze())
         elif "br" in self.loss_type:  # beyesian regression
             pred_y, pred_logvar = pred[:, :, :1], pred[:, :, 1:]
             pred_var = torch.exp(pred_logvar)
