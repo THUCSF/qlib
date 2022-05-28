@@ -27,7 +27,7 @@ def train_rnn():
             test_end = test_start = train_end + 1
             for data_type in ["raw"]:
                 for market in ["main"]:
-                    for loss_type in ["quantile-last"]:
+                    for loss_type in ["rgr-last"]:
                         for n_layer in [4]:
                             cmds.append(
                                 cmd.format(

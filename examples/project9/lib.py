@@ -2,6 +2,7 @@
 """
 import json
 import os
+import sys
 import torch
 import numpy as np
 
@@ -306,10 +307,12 @@ def get_train_config(args):
 
     task = {
         "model": {
-            "class": "RNN",
+            #"class": "RNN",
+            "class": "TemporalRelator",
             "module_path": "qlib.contrib.model.rnn",
             "kwargs": {
-                "core_type": "LSTM",
+                "extractor_type": "LSTM",
+                "nhead": 8,
                 "input_size": input_size,
                 "output_size": output_dim,
                 "hidden_size": args.hidden_size,

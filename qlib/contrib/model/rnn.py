@@ -37,25 +37,25 @@ class QuantileLoss(torch.autograd.Function):
         self.n_q, self.t_q = n_q, t_q
 
     @staticmethod
-    def forward(ctx, dt_seq : torch.Tensor, gt_seq : torch.Tensor, coef : float = 1.0, n_q : int = 10, t_q : int = 1):
+    def forward(ctx, dt_seq: torch.Tensor, gt_seq: torch.Tensor, coef: float = 1.0, n_q: int = 5, t_q: int = 1):
         """
         Args:
             dt_seq: Shape (N,) Tensor, the sequence to be differentiated.
             gt_seq: Shape (N,) Tensor, the groundtruth values.
         """
-        dt_idx = dt_seq.argsort() # in ascenting order
+        dt_idx = dt_seq.argsort()  # in ascenting order
         gt_idx = gt_seq.argsort()
         dt_q = torch.zeros_like(dt_idx)
         gt_q = torch.zeros_like(gt_idx)
         step_size = math.floor(dt_idx.shape[0] / float(n_q))
-        for q_idx in range(n_q):
+        for q_idx in range(1, n_q):
             st, ed = step_size * q_idx, step_size * (q_idx + 1)
             ed = min(dt_idx.shape[0], ed)
             dt_q[dt_idx[st:ed]] = q_idx
             gt_q[gt_idx[st:ed]] = q_idx
         diff_q = (gt_q - dt_q).float()
         ctx.save_for_backward(diff_q)
-        ctx.coef, ctx.t_q = coef, t_q 
+        ctx.coef, ctx.t_q = coef, t_q
         val = diff_q.abs().mean()
         return val
 
@@ -67,8 +67,8 @@ class QuantileLoss(torch.autograd.Function):
         """
         coef, t_q = ctx.coef, ctx.t_q
         diff_q, = ctx.saved_tensors
-        mask = diff_q.abs() > t_q
-        grad = (mask * diff_q).float()
+        mask = (diff_q.abs() > t_q).float()
+        grad = (mask * diff_q).float() / diff_q.shape[0]
         return coef * grad * grad_output, -coef * grad * grad_output, None, None, None
 
 
@@ -146,6 +146,7 @@ class RNNLearner(pl.LightningModule):
         elif "quantile-last" in self.loss_type:
             if label.numel() > 1:
                 loss = loss + quantile_loss(pred.squeeze(), label.squeeze())
+                loss = loss + torch.square(pred.mean()) # require zero mean of output
         elif "br" in self.loss_type:  # beyesian regression
             pred_y, pred_logvar = pred[:, :, :1], pred[:, :, 1:]
             pred_var = torch.exp(pred_logvar)
@@ -244,6 +245,95 @@ class RNNLearner(pl.LightningModule):
         return res
 
 
+class PositionalEncoding1D(torch.nn.Module):
+    def __init__(self, channels):
+        """source: https://github.com/tatp22/multidim-positional-encoding/blob/master/positional_encodings/positional_encodings.py
+        :param channels: The last dimension of the tensor you want to apply pos emb to.
+        """
+        super(PositionalEncoding1D, self).__init__()
+        self.org_channels = channels
+        channels = int(np.ceil(channels / 2) * 2)
+        self.channels = channels
+        inv_freq = 1.0 / \
+            (10000 ** (torch.arange(0, channels, 2).float() / channels))
+        self.register_buffer("inv_freq", inv_freq)
+        self.cached_penc = None
+
+    def forward(self, tensor):
+        """
+        :param tensor: A 3d tensor of size (steps, batch_size, ch)
+        :return: Attaching Positional Encoding Matrix of size (steps, batch_size, ch) to tensor
+        """
+        if len(tensor.shape) != 3:
+            raise RuntimeError("The input tensor has to be 3d!")
+
+        if self.cached_penc is not None and self.cached_penc.shape == tensor.shape:
+            return self.cached_penc
+
+        self.cached_penc = None
+        x, batch_size, orig_ch = tensor.shape
+        pos_x = torch.arange(x, device=tensor.device).type(
+            self.inv_freq.type())
+        sin_inp_x = torch.einsum("i,j->ij", pos_x, self.inv_freq)
+        emb = torch.cat((sin_inp_x.sin(), sin_inp_x.cos()), dim=-1)
+        self.cached_penc = emb[None, :, :orig_ch].repeat(batch_size, 1, 1)
+        return torch.cat([tensor, self.cached_penc], dim=-1)
+
+
+class TemporalRelator(torch.nn.Module):
+    def __init__(self, input_size, hidden_size, num_layers, output_size, nhead, dropout, **kwargs):
+        super().__init__()
+        self.extractor_type = kwargs["extractor_type"]
+        layer = torch.nn.TransformerEncoderLayer(
+            d_model=hidden_size, nhead=nhead, dim_feedforward=hidden_size, dropout=dropout)
+        if self.extractor_type == "transformer":
+            self.position_encoding_layer = PositionalEncoding1D(16)
+            self.embed_layer = torch.nn.Linear(input_size, hidden_size - 16)
+            self.instance_feature = torch.nn.TransformerEncoder(
+                layer, num_layers)
+        elif self.extractor_type == "LSTM":
+            self.instance_feature = torch.nn.LSTM(
+                input_size, hidden_size, num_layers, dropout=dropout)
+        self.instance_relator = torch.nn.TransformerEncoder(layer, num_layers)
+        self.fc_out = torch.nn.Linear(hidden_size, output_size)
+
+    def forward(self, x, last_only=True):
+        """
+        Args:
+            x: (steps, batch, channels)
+        """
+        # (N, C) use the feature at the last day
+        if self.extractor_type == "transformer":
+            embed = self.embed_layer(x)
+            feat = self.position_encoding_layer(embed)
+            feat = self.instance_feature(feat)[-1]
+        else:
+            # (T, N, C)[-1]
+            feat = self.instance_feature(x)[0][-1]
+        # (N, 1, C) insert a dummy batch dim
+        feat = self.instance_relator(feat.unsqueeze(1)).squeeze()
+        pred = self.fc_out(feat)
+        return pred
+
+
+class TransformerClassifier(torch.nn.Module):
+    def __init__(self, input_size, hidden_size, output_size, nhead, num_layers, **kwargs):
+        super().__init__()
+        self.position_encoding_layer = PositionalEncoding1D(16)
+        self.embed_layer = torch.nn.Linear(input_size, hidden_size - 16)
+        layer = torch.nn.TransformerEncoderLayer(
+            d_model=hidden_size, nhead=nhead, dim_feedforward=hidden_size)
+        self.core = torch.nn.TransformerEncoder(layer, num_layers)
+        self.fc_out = torch.nn.Linear(hidden_size, output_size)
+
+    def forward(self, x, last_only=True):
+        embed = self.embed_layer(x)
+        feat = self.position_encoding_layer(embed)
+        out = self.core(feat)  # last only as we have not provided the mask yet
+        pred = self.fc_out(out[-1])
+        return pred
+
+
 class RNN(torch.nn.Module):
     def __init__(self, core_type="LSTM", output_size=1, **kwargs):
         super().__init__()
@@ -256,7 +346,8 @@ class RNN(torch.nn.Module):
                 [torch.nn.LSTM(**kwargs) for _ in range(output_size)]
             )
             self.fc_outs = torch.nn.ModuleList(
-                [torch.nn.Linear(kwargs["hidden_size"], 1) for _ in range(output_size)]
+                [torch.nn.Linear(kwargs["hidden_size"], 1)
+                 for _ in range(output_size)]
             )
 
     def forward(self, x, last_only=True):

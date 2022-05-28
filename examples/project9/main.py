@@ -12,8 +12,9 @@ from tqdm import tqdm
 from torch.utils.data import DataLoader
 from pytorch_lightning.callbacks import ModelCheckpoint
 sys.path.insert(0, "../..")
-import qlib, lib
-from lib import torch2numpy
+#sys.path.insert(0, "../../..")
+import qlib
+import lib
 from dataset import AlignedTSDataset, TSDataset
 from qlib.utils import init_instance_by_config
 from qlib.config import REG_CN
@@ -94,7 +95,7 @@ if __name__ == "__main__":
                         help="The index of repeats (to distinguish different runs).")
     # architecture options
     parser.add_argument("--hidden-size", default=256, type=int)
-    parser.add_argument("--n-layer", default=2, type=int,
+    parser.add_argument("--n-layer", default=4, type=int,
                         help="The number of hidden layers.")
     parser.add_argument("--loss-type", default="rgr-all", type=str,
                         help="The type of loss function and output format. rgr - regression; cls - classification; br - bayesian regression; mae - mean absolute error")
